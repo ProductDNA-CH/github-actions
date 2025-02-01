@@ -1,7 +1,7 @@
 # Install ArgoCD CLI action
 This action aims to install the ArgoCD CLI package.
 
-https://github.com/ProductDNA-CH/github-actions/blob/master/install-argocd-cli/action.yaml#L1-L100
+https://github.com/ProductDNA-CH/github-actions/blob/138b5fae2b3fd82014e407fb2548e67bfba60eef/install-argocd-cli/action.yaml#L1-L100
 
 # Usage
 ```
