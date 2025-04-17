@@ -11,8 +11,8 @@ jobs:
         id: init
         uses: ProductDNA-CH/github-actions/terraform-init@master
         with:
-          storage-account-name: ${{ secrets.STORAGE_ACCOUNT_NAME }}
-          container-name: ${{ secrets.CONTAINER_NAME }}
-          key: ${{ secrets.KEY }}
-          working-directory:
+          storage-account-name: ${{ secrets.AZ_STORAGE_ACCOUNT_NAME }}
+          container-name: ${{ secrets.AZ_CONTAINER_NAME }}
+          key: ${{ matrix.terraform_key }}
+          working-directory: ${{ steps.set-variables.outputs.terraform_path }}
 ```
