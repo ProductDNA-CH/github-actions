@@ -1,0 +1,34 @@
+name: Terraform init
+description: Initialize Terraform with a Azure Blob Storage backend
+inputs:
+  storage-account-name:
+    description: 'The name of the Azure Storage Account'
+    required: true
+  container-name:
+    description: 'The name of the Azure Blob Storage container'
+    required: false
+    default: 'tfstates'
+  key:
+    description: 'The name of the state file'
+    required: true
+  working-directory:
+    description: 'The working directory'
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Terraform backend
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STORAGE_ACCOUNT_NAME: ${{ inputs.storage-account-name }}
+        CONTAINER_NAME: ${{ inputs.container-name }}
+        KEY: ${{ inputs.key }}
+      run: |
+        echo "storage_account_name = \"$STORAGE_ACCOUNT_NAME\"" > backend.tfvars
+        echo "container_name = \"$CONTAINER_NAME\"" > backend.tfvars
+        echo "key = \"$KEY\"" >> backend.tfvars
+      shell: bash
+    - name: Terraform init
+      working-directory: ${{ inputs.working-directory }}
+      run: terraform init --backend-config=backend.tfvars
+      shell: bash
