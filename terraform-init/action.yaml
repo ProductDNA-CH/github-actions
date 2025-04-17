@@ -11,12 +11,22 @@ inputs:
   key:
     description: 'The name of the state file'
     required: true
+  client-id:
+    description: 'The client ID of the Azure Service Principal'
+    required: true
+  subscription-id:
+    description: 'The subscription ID of the Azure Service Principal'
+    required: true
+  tenant-id:
+    description: 'The tenant ID of the Azure Service Principal'
+    required: true
   working-directory:
     description: 'The working directory'
     required: true
 runs:
   using: composite
   steps:
+    # https://developer.hashicorp.com/terraform/language/backend/azurerm#example-configuration-for-github
     - name: Set up Terraform backend
       working-directory: ${{ inputs.working-directory }}
       env:
@@ -32,3 +42,8 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: terraform init --backend-config=backend.tfvars
       shell: bash
+      env:
+        ARM_USE_OIDC: true
+        ARM_CLIENT_ID: ${{ inputs.client-id }}
+        ARM_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
+        ARM_TENANT_ID: ${{ inputs.tenant-id }}
