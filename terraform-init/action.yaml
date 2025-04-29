@@ -43,9 +43,9 @@ runs:
         echo "key = \"$KEY\"" >> backend.tfvars
         echo "resource_group_name = \"$RESOURCE_GROUP_NAME\"" >> backend.tfvars
       shell: bash
-    - name: Terraform init -input=false
+    - name: Terraform init 
       working-directory: ${{ inputs.working-directory }}
-      run: terraform init -backend-config=backend.tfvars
+      run: terraform init -backend-config=backend.tfvars -input=false
       shell: bash
       env:
         ARM_USE_OIDC: true
