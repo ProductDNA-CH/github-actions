@@ -11,6 +11,9 @@ inputs:
   key:
     description: 'The name of the state file'
     required: true
+  resource-group-name:
+    description: 'The name of the Azure Resource Group'
+    required: true
   client-id:
     description: 'The client ID of the Azure Service Principal'
     required: true
@@ -33,14 +36,16 @@ runs:
         STORAGE_ACCOUNT_NAME: ${{ inputs.storage-account-name }}
         CONTAINER_NAME: ${{ inputs.container-name }}
         KEY: ${{ inputs.key }}
+        RESOURCE_GROUP_NAME: ${{ inputs.resource-group-name }}
       run: |
         echo "storage_account_name = \"$STORAGE_ACCOUNT_NAME\"" > backend.tfvars
         echo "container_name = \"$CONTAINER_NAME\"" > backend.tfvars
         echo "key = \"$KEY\"" >> backend.tfvars
+        echo "resource_group_name = \"$RESOURCE_GROUP_NAME\"" >> backend.tfvars
       shell: bash
     - name: Terraform init
       working-directory: ${{ inputs.working-directory }}
-      run: terraform init --backend-config=backend.tfvars
+      run: terraform init -backend-config=backend.tfvars
       shell: bash
       env:
         ARM_USE_OIDC: true
