@@ -47,8 +47,3 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: terraform init -backend-config=backend.tfvars -input=false
       shell: bash
-      env:
-        ARM_USE_OIDC: true
-        ARM_CLIENT_ID: ${{ inputs.client-id }}
-        ARM_SUBSCRIPTION_ID: ${{ inputs.subscription-id }}
-        ARM_TENANT_ID: ${{ inputs.tenant-id }}
