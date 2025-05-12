@@ -1,0 +1,130 @@
+name: 'Gist Lock Action'
+description: 'Create, lock, unlock or delete a Gist lock file'
+
+inputs:
+  token:
+    description: 'GitHub token with gist scope'
+    required: true
+  gist-id:
+    description: 'ID of the Gist to operate on (only required for lock, unlock, and delete)'
+    required: false
+  filename:
+    description: 'Filename of the lock file'
+    required: false
+    default: 'lock.txt'
+  content:
+    description: 'Initial content of the lock file (only used when creating a Gist)'
+    required: false
+    default: 'lock:free'
+  description:
+    description: 'Gist description (only used when creating a Gist)'
+    required: false
+    default: 'Temporary lock Gist'
+  public:
+    description: 'Whether the Gist should be public (only used when creating a Gist)'
+    required: false
+    default: 'false'
+  mode:
+    description: 'The operation mode: "create", "lock", "unlock", or "delete"'
+    required: true
+
+outputs:
+  gist-id:
+    description: 'The ID of the created Gist (only for "create")'
+    value: ${{ steps.create.outputs.gist-id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: "Create Gist (mode: create)"
+      id: create
+      if: ${{ inputs.mode == 'create' }}
+      shell: bash
+      run: |
+        # Create the Gist payload
+        GIST_PAYLOAD=$(cat <<EOF
+        {
+          "description": "${{ inputs.description }}",
+          "public": ${{ inputs.public }},
+          "files": {
+            "${{ inputs.filename }}": {
+              "content": "${{ inputs.content }}"
+            }
+          }
+        }
+        EOF
+        )
+
+        # Create the Gist via API
+        RESPONSE=$(curl -s -X POST \
+          -H "Authorization: token ${{ inputs.token }}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          -d "$GIST_PAYLOAD" \
+          https://api.github.com/gists)
+
+        # Extract the Gist ID
+        GIST_ID=$(echo $RESPONSE | jq -r '.id')
+
+        if [ "$GIST_ID" == "null" ]; then
+          echo "Failed to create Gist"
+          exit 1
+        fi
+
+        echo "Gist created with ID: $GIST_ID"
+        echo "::set-output name=gist-id::$GIST_ID"
+
+    - name: "Lock Gist (mode: lock)"
+      if: ${{ inputs.mode == 'lock' }}
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.gist-id }}" ]; then
+          echo "Gist ID is required for lock mode"
+          exit 1
+        fi
+
+        echo "Attempting to acquire lock..."
+        while true; do
+          STATUS=$(curl -s -H "Authorization: token ${{ inputs.token }}" https://api.github.com/gists/${{ inputs.gist-id }} \
+            | jq -r ".files[\"${{ inputs.filename }}\"].content")
+
+          if [[ "$STATUS" == "lock:free" ]]; then
+            echo "Lock is free, claiming it..."
+            curl -s -X PATCH -H "Authorization: token ${{ inputs.token }}" \
+              -d "{\"files\": {\"${{ inputs.filename }}\": {\"content\": \"lock:claimed by $GITHUB_RUN_ID\"}}}" \
+              https://api.github.com/gists/${{ inputs.gist-id }} > /dev/null
+            echo "🔓 Lock acquired."
+            break
+          else
+            echo "🔒 Lock held ('$STATUS'), retrying in 5s..."
+            sleep 5
+          fi
+        done
+
+    - name: "Unlock Gist (mode: unlock)"
+      if: ${{ inputs.mode == 'unlock' }}
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.gist-id }}" ]; then
+          echo "Gist ID is required for unlock mode"
+          exit 1
+        fi
+
+        echo "Releasing lock..."
+        curl -s -X PATCH -H "Authorization: token ${{ inputs.token }}" \
+          -d "{\"files\": {\"${{ inputs.filename }}\": {\"content\": \"lock:free\"}}}" \
+          https://api.github.com/gists/${{ inputs.gist-id }} > /dev/null
+        echo "✅ Lock released."
+
+    - name: "Delete Gist (mode: delete)"
+      if: ${{ inputs.mode == 'delete' }}
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.gist-id }}" ]; then
+          echo "Gist ID is required for delete mode"
+          exit 1
+        fi
+
+        echo "Deleting Gist..."
+        curl -s -X DELETE -H "Authorization: token ${{ inputs.token }}" \
+          https://api.github.com/gists/${{ inputs.gist-id }}
+        echo "❌ Gist deleted."
