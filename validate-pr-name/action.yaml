@@ -1,0 +1,41 @@
+name: Validate PR Name
+description: Validates the name of a pull request against a given regex pattern.
+
+inputs:
+  name-regex:
+    description: The regex pattern to use to validate the PR name.
+    required: false
+    default: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\((respect-code|respect-code-e2e|respect-saas|respect-saas-e2e|testbed|testbed-e2e|ui|api|core)\))?!?: .+$'
+  github-token:
+    description: GitHub token used to post a comment on the PR.
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate PR name and comment on failure
+      shell: bash
+      env:
+        PR_NAME: ${{ github.event.pull_request.title }}
+        REGEX: ${{ inputs.name-regex }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        ISSUE_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        echo "PR name: '$PR_NAME'"
+        echo "Expected regex: '$REGEX'"
+
+        if [[ "$PR_NAME" =~ $REGEX ]]; then
+          echo "✅ PR name matches the pattern."
+        else
+          echo "❌ PR name does not match the required pattern: $REGEX"
+
+          COMMENT="❌ **PR name validation failed**\n\nExpected pattern: \`$REGEX\`\nProvided name: \`$PR_NAME\`"
+
+          # curl -s -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+          #   -H "Authorization: Bearer $GITHUB_TOKEN" \
+          #   -H "Content-Type: application/json" \
+          #   -d "$(jq -nc --arg body "$COMMENT" '{ body: $body }')"
+
+          exit 1
+        fi
