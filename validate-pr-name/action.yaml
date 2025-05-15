@@ -32,10 +32,10 @@ runs:
 
           COMMENT="❌ **PR name validation failed**\n\nExpected pattern: \`$REGEX\`\nProvided name: \`$PR_NAME\`"
 
-          # curl -s -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
-          #   -H "Authorization: Bearer $GITHUB_TOKEN" \
-          #   -H "Content-Type: application/json" \
-          #   -d "$(jq -nc --arg body "$COMMENT" '{ body: $body }')"
+          curl -s -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg body "$COMMENT" '{ body: $body }')"
 
           exit 1
         fi
