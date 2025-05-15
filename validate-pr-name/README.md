@@ -9,7 +9,7 @@ This composite GitHub Action validates a pull request’s name against a configu
 | Name          | Description                                  | Required | Default                                                                                                                       |
 |---------------|----------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------|
 | `github-token` | GitHub token used to post comments on the PR | **Yes**  | N/A                                                                                                                           |
-| `name-regex`   | Regex pattern to validate the PR name        | No       | `^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\((respect-code|respect-code-e2e|respect-saas|respect-saas-e2e|testbed|testbed-e2e|ui|api|core)\))?!?: .+$` |
+| `name-regex`   | Regex pattern to validate the PR name        | No       | `^(feat\|fix\|docs\|style\|refactor\|perf\|test\|build\|ci\|chore\|revert)(\((respect-code\|respect-code-e2e\|respect-saas\|respect-saas-e2e\|testbed\|testbed-e2e\|ui\|api\|core)\))?!?: .+$` |
 
 ---
 
@@ -27,6 +27,7 @@ on:
       - reopened
       - edited
       - synchronize
+
 permissions:
   issues: write
 
