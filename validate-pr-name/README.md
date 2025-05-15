@@ -41,6 +41,15 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
+By default, the regex pattern checks for the following formats:
+- types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
+- scopes: `respect-code`, `respect-code-e2e`, `respect-saas`, `respect-saas-e2e`, `testbed`, `testbed-e2e`, `ui`, `api`, `core`
+- message: must start with a type and scope (if provided) followed by a colon and a space.
+
+Examples:
+- `feat(ui): Add new button component`
+- `fix: Correct typo in documentation`
+
 ---
 
 ## Notes
