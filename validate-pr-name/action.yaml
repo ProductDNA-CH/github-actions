@@ -1,11 +1,10 @@
 name: Validate PR Name
-description: Validates the name of a pull request against a given regex pattern.
+description: Validates the name of a pull request using conventional commit types and optional user-defined scopes.
 
 inputs:
-  name-regex:
-    description: The regex pattern to use to validate the PR name.
+  scopes:
+    description: A comma-separated list of valid scopes. Optional.
     required: false
-    default: '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\((respect-code|respect-code-e2e|respect-saas|respect-saas-e2e|testbed|testbed-e2e|ui|api|core)\))?!?: .+$'
   github-token:
     description: GitHub token used to post a comment on the PR.
     required: true
@@ -17,13 +16,35 @@ runs:
       shell: bash
       env:
         PR_NAME: ${{ github.event.pull_request.title }}
-        REGEX: ${{ inputs.name-regex }}
+        SCOPES: ${{ inputs.scopes }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         ISSUE_NUMBER: ${{ github.event.pull_request.number }}
       run: |
         echo "PR name: '$PR_NAME'"
-        echo "Expected regex: '$REGEX'"
+        echo "Scopes: '$SCOPES'"
+
+        TYPES="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert"
+
+        if [ -z "$SCOPES" ]; then
+          # No scopes provided: allow no scope or validated scope
+          SCOPE_REGEX='[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*'
+          REGEX="^($TYPES)(\\(($SCOPE_REGEX)?\\))?!?: .+$"
+        else
+          # Scopes provided: validate each scope, then build regex requiring one of these scopes
+          IFS=',' read -ra SCOPE_LIST <<< "$SCOPES"
+          for SCOPE in "${SCOPE_LIST[@]}"; do
+            if [[ ! "$SCOPE" =~ ^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$ ]]; then
+              echo "❌ Invalid scope format: '$SCOPE'"
+              echo "Scopes must be alphanumeric and may include hyphens not at start or end."
+              exit 1
+            fi
+          done
+          SCOPE_PATTERN=$(echo "$SCOPES" | sed 's/,/|/g')
+          REGEX="^($TYPES)(\\(($SCOPE_PATTERN)\\))?!?: .+$"
+        fi
+
+        echo "Generated regex: $REGEX"
 
         if [[ "$PR_NAME" =~ $REGEX ]]; then
           echo "✅ PR name matches the pattern."

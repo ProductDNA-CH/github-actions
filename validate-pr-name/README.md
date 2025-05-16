@@ -1,21 +1,33 @@
 # Validate PR Name GitHub Action
 
-This composite GitHub Action validates a pull request’s name against a configurable regex pattern following Conventional Commit guidelines.
+This composite GitHub Action validates pull request titles using the [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) specification, with a configurable list of allowed scopes.
 
----
+## ✅ Supported commit types
 
-## Inputs
+The following types are supported and hardcoded into the action:
 
-| Name          | Description                                  | Required | Default                                                                                                                       |
-|---------------|----------------------------------------------|----------|-------------------------------------------------------------------------------------------------------------------------------|
-| `github-token` | GitHub token used to post comments on the PR | **Yes**  | N/A                                                                                                                           |
-| `name-regex`   | Regex pattern to validate the PR name        | No       | `^(feat\|fix\|docs\|style\|refactor\|perf\|test\|build\|ci\|chore\|revert)(\((respect-code\|respect-code-e2e\|respect-saas\|respect-saas-e2e\|testbed\|testbed-e2e\|ui\|api\|core)\))?!?: .+$` |
+- `feat`
+- `fix`
+- `docs`
+- `style`
+- `refactor`
+- `perf`
+- `test`
+- `build`
+- `ci`
+- `chore`
+- `revert`
 
----
+## 📥 Inputs
 
-## Usage
+| Name           | Required | Description                                              |
+|----------------|----------|----------------------------------------------------------|
+| `scopes`       | No       | Comma-separated list of allowed scopes. Optional.       |
+| `github-token` | Yes      | GitHub token with `issues: write` permission.            |
 
-Example workflow using this action:
+NB: The token should have permissions to post comments on the pull request with the `issues: write` permission.
+
+## 🔧 Example usage
 
 ```yaml
 name: PR Name Validator
@@ -38,22 +50,43 @@ jobs:
       - name: Validate PR name
         uses: ProductDNA-CH/github-actions/validate-pr-name@master
         with:
+          scopes: respect-code,respect-code-e2e,respect-saas,respect-saas-e2e,testbed,testbed-e2e,ui,api,core
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-By default, the regex pattern checks for the following formats:
-- types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`, `revert`
-- scopes: `respect-code`, `respect-code-e2e`, `respect-saas`, `respect-saas-e2e`, `testbed`, `testbed-e2e`, `ui`, `api`, `core`
-- message: must start with a type and scope (if provided) followed by a colon and a space.
+## 📌 Title format
 
-Examples:
-- `feat(ui): Add new button component`
-- `fix: Correct typo in documentation`
+The PR title must follow the format:
+
+```yaml
+<type>(<scope>): <description>
+```
+
+Where:
+
+- `<type>` is one of the supported types
+- `<scope>` is one of the allowed scopes provided in `scopes` (or optional if `scopes` is empty)
+- `!` is optional for breaking changes
+
+### ✅ Valid example
+```yaml
+feat(ui): add dark mode support
+```
+
+### ✅ Valid example without scopes (if `scopes` input is empty)
+```yaml
+fix: correct minor bug
+```
+
+### ❌ Invalid example
+```yaml
+feature(ui): added new button style
+```
+
+## 💬 Comments on failure
+
+If the title does not match the expected format, the action will post a comment on the pull request with the expected pattern and exit with an error.
 
 ---
 
-## Notes
-
-- The `github-token` input **must** be provided for the action to function properly.
-  - The token should have permissions to post comments on the pull request with the `issues: write` permission.
-- Customize the regex via `name-regex` input if you want a different validation pattern.
+For questions or feedback, feel free to open an issue in this repository.
