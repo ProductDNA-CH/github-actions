@@ -1,0 +1,31 @@
+name: Docker tag and push existing image
+description: Pull, tag and push an existing Docker image with a new tag
+
+inputs:
+  registry:
+    description: 'Docker registry (ex: myacr.azurecr.io)'
+    required: true
+  image_name:
+    description: 'Image name (ex: myimage)'
+    required: true
+  source_tag:
+    description: 'Existing image tag (ex: commit SHA)'
+    required: true
+  target_tag:
+    description: 'Tag to create and push (ex: prod)'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Pull image
+      run: docker pull ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }}
+      shell: bash
+
+    - name: Tag image
+      run: docker tag ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }} ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}
+      shell: bash
+
+    - name: Push tagged image
+      run: docker push ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}
+      shell: bash
