@@ -17,6 +17,8 @@ The following types are supported and hardcoded into the action:
 - `ci`
 - `chore`
 - `revert`
+- `release`
+- `hotfix`
 
 ## 📥 Inputs
 
@@ -41,7 +43,7 @@ on:
       - synchronize
 
 permissions:
-  issues: write
+  pull-requests: write
 
 jobs:
   check-pr-name:
