@@ -1,0 +1,49 @@
+name: Validate Branch Name on PR
+description: Validates the name of a branch in a pull request based on the target branch.
+
+runs:
+  using: "composite"
+  steps:
+    - name: Validate branch name
+      shell: bash
+      run: |
+        BASE="${{ github.event.pull_request.base.ref }}"
+        HEAD="${{ github.event.pull_request.head.ref }}"
+
+        echo "🔍 Base branch: $BASE"
+        echo "🔍 Head branch: $HEAD"
+
+        # Extraire le préfixe (avant le premier /)
+        PREFIX="${HEAD%%/*}"
+
+        case "$BASE" in
+          develop)
+            case "$PREFIX" in
+              feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)
+                echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
+                ;;
+              *)
+                echo "❌ Invalid branch name '$HEAD' for target 'develop'"
+                echo "➡️  Allowed prefixes: feat/, fix/, docs/, style/, refactor/, perf/, test/, build/, ci/, chore/, revert/"
+                exit 1
+                ;;
+            esac
+            ;;
+          main)
+            case "$PREFIX" in
+              release|hotfix)
+                echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
+                ;;
+              *)
+                echo "❌ Invalid branch name '$HEAD' for target 'main'"
+                echo "➡️  Allowed prefixes: release/, hotfix/"
+                exit 1
+                ;;
+            esac
+            ;;
+          *)
+            echo "ℹ️ No branch name restrictions for target '$BASE'."
+            ;;
+        esac
+
+        echo "✅ Branch name validation passed."
