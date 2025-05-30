@@ -42,7 +42,7 @@ name: Validate Branch Name
 
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize]
+    types: [opened, edited, reopened]
 
 jobs:
   validate-branch-name:
