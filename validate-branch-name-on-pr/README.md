@@ -38,17 +38,18 @@ Add the following step to your workflow:
 ## 💡 Example Workflow
 
 ```yaml
-name: Validate Branch Name
+name: Validate PR branches name
 
 on:
   pull_request:
     types: [opened, edited, reopened]
 
 jobs:
-  validate-branch-name:
+  validate-branches-name:
+    name: Validate branches name on PR
     runs-on: ubuntu-latest
     steps:
-      - name: Validate branch name
+      - name: Validate branches name
         uses: ProductDNA-CH/github-actions/validate-branch-name-on-pr@master
 ```
 
