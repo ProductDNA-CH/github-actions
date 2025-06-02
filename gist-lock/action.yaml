@@ -71,7 +71,7 @@ runs:
         fi
 
         echo "Gist created with ID: $GIST_ID"
-        echo "::set-output name=gist-id::$GIST_ID"
+        echo "gist-id=$GIST_ID" >> "$GITHUB_OUTPUT"
 
     - name: "Lock Gist (mode: lock)"
       if: ${{ inputs.mode == 'lock' }}
