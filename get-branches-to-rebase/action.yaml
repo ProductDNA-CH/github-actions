@@ -6,7 +6,7 @@ runs:
   steps:
 
     - name: List branches to rebase
-      id: branches
+      id: branches-list
       env:
         REF_NAME: ${{ github.ref_name }}
       shell: bash
