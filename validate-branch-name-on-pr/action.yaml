@@ -4,6 +4,7 @@ description: Validates the name of a branch in a pull request based on the targe
 runs:
   using: "composite"
   steps:
+
     - name: Validate branch name
       shell: bash
       run: |

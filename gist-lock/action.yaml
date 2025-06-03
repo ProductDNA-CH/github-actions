@@ -28,14 +28,10 @@ inputs:
     description: 'The operation mode: "create", "lock", "unlock", or "delete"'
     required: true
 
-outputs:
-  gist-id:
-    description: 'The ID of the created Gist (only for "create")'
-    value: ${{ steps.create.outputs.gist-id }}
-
 runs:
   using: 'composite'
   steps:
+
     - name: "Create Gist (mode: create)"
       id: create
       if: ${{ inputs.mode == 'create' }}
@@ -128,3 +124,8 @@ runs:
         curl -s -X DELETE -H "Authorization: token ${{ inputs.token }}" \
           https://api.github.com/gists/${{ inputs.gist-id }}
         echo "❌ Gist deleted."
+
+outputs:
+  gist-id:
+    description: 'The ID of the created Gist (only for "create")'
+    value: ${{ steps.create.outputs.gist-id }}

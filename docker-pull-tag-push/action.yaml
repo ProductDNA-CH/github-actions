@@ -18,14 +18,15 @@ inputs:
 runs:
   using: "composite"
   steps:
+
     - name: Pull image
-      run: docker pull ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }}
       shell: bash
+      run: docker pull ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }}
 
     - name: Tag image
-      run: docker tag ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }} ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}
       shell: bash
+      run: docker tag ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.source_tag }} ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}
 
     - name: Push tagged image
-      run: docker push ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}
       shell: bash
+      run: docker push ${{ inputs.registry }}/${{ inputs.image_name }}:${{ inputs.target_tag }}

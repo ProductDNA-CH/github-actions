@@ -1,5 +1,6 @@
 name: Terraform init
 description: Initialize Terraform with a Azure Blob Storage backend
+
 inputs:
   storage-account-name:
     description: 'The name of the Azure Storage Account'
@@ -26,9 +27,11 @@ inputs:
   working-directory:
     description: 'The working directory'
     required: true
+
 runs:
   using: composite
   steps:
+
     # https://developer.hashicorp.com/terraform/language/backend/azurerm#example-configuration-for-github
     - name: Set up Terraform backend
       working-directory: ${{ inputs.working-directory }}
@@ -37,13 +40,14 @@ runs:
         CONTAINER_NAME: ${{ inputs.container-name }}
         KEY: ${{ inputs.key }}
         RESOURCE_GROUP_NAME: ${{ inputs.resource-group-name }}
+      shell: bash
       run: |
         echo "storage_account_name = \"$STORAGE_ACCOUNT_NAME\"" > backend.tfvars
         echo "container_name = \"$CONTAINER_NAME\"" >> backend.tfvars
         echo "key = \"$KEY\"" >> backend.tfvars
         echo "resource_group_name = \"$RESOURCE_GROUP_NAME\"" >> backend.tfvars
-      shell: bash
+
     - name: Terraform init 
       working-directory: ${{ inputs.working-directory }}
-      run: terraform init -backend-config=backend.tfvars -input=false
       shell: bash
+      run: terraform init -backend-config=backend.tfvars -input=false
