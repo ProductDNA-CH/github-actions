@@ -16,7 +16,7 @@ runs:
             git branch -rl 'origin/hotfix/*' \
                         -rl 'origin/release/*' \
                         -rl 'origin/develop' \
-            | awk -F'origin/' '{print $2}' \
+            | awk -F'origin/' '{print "\"" $2 "\""}' \
             | paste -sd, - \
           )" >> "$GITHUB_OUTPUT"
         elif [[ "$REF_NAME" == "develop" ]]; then
@@ -32,7 +32,7 @@ runs:
                         -rl 'origin/ci/*' \
                         -rl 'origin/chore/*' \
                         -rl 'origin/revert/*' \
-            | awk -F'origin/' '{print $2}' \
+            | awk -F'origin/' '{print "\"" $2 "\""}' \
             | paste -sd, - \
           )" >> "$GITHUB_OUTPUT"
         fi
@@ -42,7 +42,7 @@ runs:
       env:
         BRANCHES: ${{ steps.branches-list.outputs.list }}
       shell: bash
-      run: echo 'names=['$BRANCHES']' | sed 's/,]/]/g' >> "$GITHUB_OUTPUT"
+      run: echo 'names=['$BRANCHES']' >> "$GITHUB_OUTPUT"
 
 outputs:
   branches:
