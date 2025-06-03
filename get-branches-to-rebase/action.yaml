@@ -1,0 +1,50 @@
+name: 'Get branches to rebase'
+description: 'Lists branches to rebase depending on the base branch (main or develop)'
+
+runs:
+  using: 'composite'
+  steps:
+
+    - name: List branches to rebase
+      id: branches
+      env:
+        REF_NAME: ${{ github.ref_name }}
+      shell: bash
+      run: |
+        if [[ "$REF_NAME" == "main" ]]; then
+          echo "list=$( \
+            git branch -rl 'origin/hotfix/*' \
+                        -rl 'origin/release/*' \
+                        -rl 'origin/develop' \
+            | awk -F'origin/' '{print $2}' \
+            | paste -sd, - \
+          )" >> "$GITHUB_OUTPUT"
+        elif [[ "$REF_NAME" == "develop" ]]; then
+          echo "list=$( \
+            git branch -rl 'origin/feat/*' \
+                        -rl 'origin/fix/*' \
+                        -rl 'origin/docs/*' \
+                        -rl 'origin/style/*' \
+                        -rl 'origin/refactor/*' \
+                        -rl 'origin/perf/*' \
+                        -rl 'origin/test/*' \
+                        -rl 'origin/build/*' \
+                        -rl 'origin/ci/*' \
+                        -rl 'origin/chore/*' \
+                        -rl 'origin/revert/*' \
+            | awk -F'origin/' '{print $2}' \
+            | paste -sd, - \
+          )" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Format as JSON array
+      id: branches-names
+      env:
+        BRANCHES: ${{ steps.branches-list.outputs.list }}
+      shell: bash
+      run: echo 'names=['$BRANCHES']' | sed 's/,]/]/g' >> "$GITHUB_OUTPUT"
+
+outputs:
+  branches:
+    description: 'Json array list of branches to rebase'
+    value: ${{ steps.branches-names.outputs.names }}

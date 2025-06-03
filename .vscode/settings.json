@@ -1,0 +1,11 @@
+{
+  "conventionalCommits.scopes": [
+    "docker-pull-tag-push",
+    "get-branches-to-rebase",
+    "gist-lock",
+    "install-argocd-cli",
+    "terraform-init",
+    "validate-branch-name-on-pr",
+    "validate-pr-name"
+  ]
+}
