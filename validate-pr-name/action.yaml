@@ -14,53 +14,62 @@ runs:
   steps:
 
     - name: Validate PR name and comment on failure
+      shell: bash
       env:
         PR_NAME: ${{ github.event.pull_request.title }}
         SCOPES: ${{ inputs.scopes }}
         GITHUB_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
         ISSUE_NUMBER: ${{ github.event.pull_request.number }}
-      shell: bash
       run: |
-        echo "PR name: '$PR_NAME'"
-        echo "Scopes: '$SCOPES'"
+        echo "🔍 PR name: '$PR_NAME'"
+        echo "🔍 Scopes: '$SCOPES'"
 
         TYPES="feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|release|hotfix"
 
+        REGEX=""
+        FAIL_MSG=""
+
         if [ -z "$SCOPES" ]; then
-          # No scopes provided: allow no scope or validated scope
           SCOPE_REGEX='[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*'
           REGEX="^($TYPES)(\\(($SCOPE_REGEX)?\\))?!?: .+$"
         else
-          # Scopes provided: validate each scope, then build regex requiring one of these scopes
           IFS=',' read -ra SCOPE_LIST <<< "$SCOPES"
           for SCOPE in "${SCOPE_LIST[@]}"; do
             if [[ ! "$SCOPE" =~ ^[a-zA-Z0-9]+(-[a-zA-Z0-9]+)*$ ]]; then
               echo "❌ Invalid scope format: '$SCOPE'"
               echo "Scopes must be alphanumeric and may include hyphens not at start or end."
-              exit 1
+              FAIL_MSG="❌ **PR name validation failed**
+
+              Invalid scope: \`$SCOPE\`
+              Scopes must be alphanumeric and may include hyphens not at start or end."
+              break
             fi
           done
           SCOPE_PATTERN=$(echo "$SCOPES" | sed 's/,/|/g')
           REGEX="^($TYPES)(\\(($SCOPE_PATTERN)\\))?!?: .+$"
         fi
 
-        echo "Generated regex: $REGEX"
+        echo "🔧 Generated regex: $REGEX"
 
-        if [[ "$PR_NAME" =~ $REGEX ]]; then
-          echo "✅ PR name matches the pattern."
-        else
-          echo "❌ PR name does not match the required pattern: $REGEX"
+        if [ -z "$FAIL_MSG" ]; then
+          if [[ "$PR_NAME" =~ $REGEX ]]; then
+            echo "✅ PR name matches the pattern."
+          else
+            echo "❌ PR name does not match the required pattern: $REGEX"
+            FAIL_MSG="❌ **PR name validation failed**
 
-          COMMENT="❌ **PR name validation failed**
-          
-          Expected pattern: \`$REGEX\`
-          Provided name: \`$PR_NAME\`"
+            Expected pattern: \`$REGEX\`
+            Provided name: \`$PR_NAME\`"
+          fi
+        fi
 
+        if [ -n "$FAIL_MSG" ]; then
           curl -s -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg body "$COMMENT" '{ body: $body }')"
-
+            -d "$(jq -nc --arg body "$FAIL_MSG" '{ body: $body }')"
           exit 1
         fi
+
+        echo "✅ PR name validation passed."
