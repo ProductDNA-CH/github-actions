@@ -1,44 +1,65 @@
 name: Validate Branch Name on PR
 description: Validates the name of a branch in a pull request based on the target branch.
 
+inputs:
+  github-token:
+    description: GitHub token used to post a comment on the PR.
+    required: true
+
 runs:
   using: "composite"
   steps:
 
-    - name: Validate branch name
+    - name: Validate branch name and comment on failure
       shell: bash
+      env:
+        BASE: ${{ github.event.pull_request.base.ref }}
+        HEAD: ${{ github.event.pull_request.head.ref }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        ISSUE_NUMBER: ${{ github.event.pull_request.number }}
       run: |
-        BASE="${{ github.event.pull_request.base.ref }}"
-        HEAD="${{ github.event.pull_request.head.ref }}"
-
         echo "🔍 Base branch: $BASE"
         echo "🔍 Head branch: $HEAD"
 
         # Extraire le préfixe (avant le premier /)
         PREFIX="${HEAD%%/*}"
 
+        FAIL_MSG=""
+        ALLOWED=""
+
         case "$BASE" in
           develop)
+            ALLOWED="feat/, fix/, docs/, style/, refactor/, perf/, test/, build/, ci/, chore/, revert/"
             case "$PREFIX" in
               feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)
                 echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
                 ;;
               *)
                 echo "❌ Invalid branch name '$HEAD' for target 'develop'"
-                echo "➡️  Allowed prefixes: feat/, fix/, docs/, style/, refactor/, perf/, test/, build/, ci/, chore/, revert/"
-                exit 1
+                echo "➡️  Allowed prefixes: $ALLOWED"
+                FAIL_MSG="❌ **Branch name validation failed**
+
+                Target branch: \`develop\`
+                Allowed prefixes: $ALLOWED
+                Provided branch: \`$HEAD\`"
                 ;;
             esac
             ;;
           main)
+            ALLOWED="release/, hotfix/"
             case "$PREFIX" in
               release|hotfix)
                 echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
                 ;;
               *)
                 echo "❌ Invalid branch name '$HEAD' for target 'main'"
-                echo "➡️  Allowed prefixes: release/, hotfix/"
-                exit 1
+                echo "➡️  Allowed prefixes: $ALLOWED"
+                FAIL_MSG="❌ **Branch name validation failed**
+
+                Target branch: \`main\`
+                Allowed prefixes: $ALLOWED
+                Provided branch: \`$HEAD\`"
                 ;;
             esac
             ;;
@@ -46,5 +67,13 @@ runs:
             echo "ℹ️ No branch name restrictions for target '$BASE'."
             ;;
         esac
+
+        if [ -n "$FAIL_MSG" ]; then
+          curl -s -X POST "https://api.github.com/repos/$REPO/issues/$ISSUE_NUMBER/comments" \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -nc --arg body "$FAIL_MSG" '{ body: $body }')"
+          exit 1
+        fi
 
         echo "✅ Branch name validation passed."
