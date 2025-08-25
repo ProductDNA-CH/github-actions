@@ -1,4 +1,4 @@
-# Update PR Description with Click Up Tasks
+# List Tickets from Commits to PR
 
 This GitHub Action automatically extracts Click Up task IDs from commit messages in a pull request and updates the PR description with a list of these tasks.
 
@@ -24,7 +24,7 @@ jobs:
   update-pr:
     runs-on: ubuntu-latest
     steps:
-      - uses: your-org/github-actions/update-pr-description@main
+      - uses: your-org/github-actions/list-tickets-from-commit-to-pr@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 ```

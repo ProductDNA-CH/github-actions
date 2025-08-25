@@ -1,5 +1,5 @@
-name: Update PR Description with Click Up Tasks
-description: Updates PR description with Click Up task IDs extracted from commit messages
+name: List Tickets from Commits to PR
+description: Lists Click Up task IDs from commit messages in the PR description
 
 inputs:
   github-token:
