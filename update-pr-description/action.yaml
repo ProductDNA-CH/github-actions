@@ -1,0 +1,188 @@
+name: Update PR Description with Click Up Tasks
+description: Updates PR description with Click Up task IDs extracted from commit messages
+
+inputs:
+  github-token:
+    description: GitHub token used to update the PR description
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get PR description
+      id: get-pr
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        echo "🔍 Fetching PR #$PR_NUMBER details..."
+        
+        PR_DATA=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER")
+        
+        CURRENT_BODY=$(echo "$PR_DATA" | jq -r '.body // ""')
+        
+        # Save to file for next steps
+        echo "$CURRENT_BODY" > /tmp/pr_body.txt
+        
+        echo "📝 Current PR description retrieved"
+
+    - name: Get commits in PR
+      id: get-commits
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        echo "🔍 Fetching commits in the PR..."
+        
+        COMMITS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
+          "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/commits")
+        
+        # Save commit messages to file
+        echo "$COMMITS" | jq -r '.[].commit.message' > /tmp/commit_messages.txt
+        
+        COMMIT_COUNT=$(echo "$COMMITS" | jq '. | length')
+        echo "📊 Found $COMMIT_COUNT commits in the PR"
+
+    - name: Extract Click Up task IDs
+      id: extract-tasks
+      shell: bash
+      run: |
+        echo "🔍 Extracting Click Up task IDs from commit messages..."
+        
+        TASK_IDS=""
+        FOUND_TASKS=()
+        
+        while IFS= read -r message; do
+          # Extract all Click Up task IDs from the commit message (format: LETTERS-NUMBERS)
+          while [[ "$message" =~ ([A-Z]+-[0-9]+) ]]; do
+            TASK_ID="${BASH_REMATCH[1]}"
+            
+            # Check if task ID is already in the array
+            if [[ ! " ${FOUND_TASKS[@]} " =~ " ${TASK_ID} " ]]; then
+              FOUND_TASKS+=("$TASK_ID")
+            fi
+            
+            # Remove the matched part to find the next one
+            message="${message#*$TASK_ID}"
+          done
+        done < /tmp/commit_messages.txt
+        
+        # Sort and format the task IDs
+        if [ ${#FOUND_TASKS[@]} -gt 0 ]; then
+          # Sort the array
+          IFS=$'\n' SORTED_TASKS=($(sort -u <<< "${FOUND_TASKS[*]}"))
+          unset IFS
+          
+          # Format as markdown list
+          for task in "${SORTED_TASKS[@]}"; do
+            if [ -z "$TASK_IDS" ]; then
+              TASK_IDS="- $task"
+            else
+              TASK_IDS="$TASK_IDS
+        - $task"
+            fi
+          done
+          
+          echo "✅ Found ${#SORTED_TASKS[@]} unique Click Up task ID(s):"
+          echo "$TASK_IDS"
+          echo "has_tasks=true" >> $GITHUB_OUTPUT
+        else
+          echo "ℹ️ No Click Up task IDs found in commit messages"
+          echo "has_tasks=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Save task IDs for next step
+        echo "$TASK_IDS" > /tmp/task_ids.txt
+
+    - name: Update PR description
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        echo "📝 Updating PR description..."
+        
+        CURRENT_BODY=$(cat /tmp/pr_body.txt)
+        TASK_IDS=$(cat /tmp/task_ids.txt)
+        
+        # Prepare the Click Up section content
+        if [ -n "$TASK_IDS" ]; then
+          CLICKUP_CONTENT="### Click Up Tasks
+        $TASK_IDS"
+        else
+          CLICKUP_CONTENT=""
+        fi
+        
+        # Define the markers
+        START_MARKER="<!--- beginning of the Click Up tasks list -->"
+        END_MARKER="<!--- end of the Click Up tasks list -->"
+        
+        # Check if markers already exist in the PR description
+        if echo "$CURRENT_BODY" | grep -q "$START_MARKER"; then
+          echo "🔄 Updating existing Click Up section..."
+          
+          # Remove the old section and insert the new one
+          NEW_BODY=$(echo "$CURRENT_BODY" | awk -v start="$START_MARKER" -v end="$END_MARKER" -v content="$CLICKUP_CONTENT" '
+            BEGIN { in_section = 0 }
+            $0 ~ start {
+              print start
+              if (content != "") {
+                print content
+              }
+              print end
+              in_section = 1
+              next
+            }
+            $0 ~ end {
+              in_section = 0
+              next
+            }
+            !in_section {
+              print
+            }
+          ')
+        else
+          echo "➕ Adding Click Up section to PR description..."
+          
+          # Create the new section with markers
+          CLICKUP_SECTION="$START_MARKER"
+          if [ -n "$CLICKUP_CONTENT" ]; then
+            CLICKUP_SECTION="$CLICKUP_SECTION
+        $CLICKUP_CONTENT"
+          fi
+          CLICKUP_SECTION="$CLICKUP_SECTION
+        $END_MARKER"
+          
+          # Add section at the beginning of the description
+          if [ -z "$CURRENT_BODY" ]; then
+            NEW_BODY="$CLICKUP_SECTION"
+          else
+            NEW_BODY="$CLICKUP_SECTION
+
+        $CURRENT_BODY"
+          fi
+        fi
+        
+        # Escape the body for JSON
+        ESCAPED_BODY=$(echo "$NEW_BODY" | jq -Rs .)
+        
+        # Update the PR via GitHub API
+        RESPONSE=$(curl -s -X PATCH "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER" \
+          -H "Authorization: Bearer $GITHUB_TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "{\"body\": $ESCAPED_BODY}")
+        
+        # Check if update was successful
+        if echo "$RESPONSE" | jq -e '.id' > /dev/null 2>&1; then
+          echo "✅ PR description updated successfully"
+        else
+          echo "❌ Failed to update PR description"
+          echo "Response: $RESPONSE"
+          exit 1
+        fi
