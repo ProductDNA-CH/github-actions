@@ -5,6 +5,7 @@ This GitHub Action automatically extracts Click Up task IDs from commit messages
 ## Features
 
 - Automatically extracts Click Up task IDs (format: `LETTERS-NUMBERS`, e.g., `TASK-123`, `FEAT-456`)
+- Handles pull requests with any number of commits using proper GitHub API pagination
 - Updates PR description with a formatted list of unique task IDs
 - Preserves existing PR description content
 - Places Click Up tasks between invisible HTML comment markers for clean organization
@@ -32,7 +33,7 @@ jobs:
 ## How it works
 
 1. **Fetches PR details**: Retrieves the current PR description
-2. **Gets commits**: Fetches all commits in the PR
+2. **Gets commits**: Fetches all commits in the PR using GitHub API pagination with Link headers to handle PRs with more than 30 commits
 3. **Extracts task IDs**: Finds all Click Up task IDs matching the pattern `[A-Z]+-[0-9]+`
 4. **Updates description**: Adds or updates a Click Up tasks section in the PR description
 
@@ -64,3 +65,13 @@ The action will add this section to your PR description:
 
 - The action requires `pull_request` events to access PR information
 - The GitHub token must have write permissions to the repository
+
+## Technical Details
+
+### Pagination Support
+This action properly handles GitHub API pagination using Link headers as recommended by [GitHub's documentation](https://docs.github.com/en/rest/using-the-rest-api/using-pagination-in-the-rest-api). This ensures that all commits are fetched, even for large PRs with more than 30 commits (the default API limit).
+
+The action:
+- Uses the `/repos/{owner}/{repo}/pulls/{pr}/commits` endpoint with `per_page=100`
+- Follows the `rel="next"` links in the response headers to fetch all pages
+- Extracts the response body using `awk` for reliable parsing of HTTP responses

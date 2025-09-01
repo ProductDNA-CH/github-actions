@@ -39,14 +39,62 @@ runs:
       run: |
         echo "🔍 Fetching commits in the PR..."
         
-        COMMITS=$(curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-          "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/commits")
+        # Fetch all commits using Link header pagination
+        all_commits="[]"
+        url="https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/commits?per_page=100"
+        page_num=1
         
-        # Save commit messages to file
-        echo "$COMMITS" | jq -r '.[].commit.message' > /tmp/commit_messages.txt
+        while [ -n "$url" ]; do
+          echo "📄 Fetching page $page_num..."
+          
+          # Make request and capture both response body and headers
+          response=$(curl -s -i -H "Authorization: Bearer $GITHUB_TOKEN" "$url")
+          
+          # Extract headers (everything before the first empty line)
+          headers=$(echo "$response" | sed '/^$/q')
+          
+          # Extract body (everything after the first empty line) - using awk for better reliability
+          body=$(echo "$response" | awk 'BEGIN{body=0} /^\r?$/{body=1;next} body{print}')
+          
+          # Check for API errors
+          if echo "$body" | jq -e '.message' > /dev/null 2>&1; then
+            error_msg=$(echo "$body" | jq -r '.message')
+            echo "❌ API Error: $error_msg"
+            exit 1
+          fi
+          
+          # Parse commits from the response (PR commits endpoint returns an array directly)
+          page_commits=$(echo "$body" | jq '.')
+          page_count=$(echo "$page_commits" | jq '. | length')
+          
+          if [ "$page_count" -gt 0 ]; then
+            echo "📄 Found $page_count commits on page $page_num"
+            all_commits=$(echo "$all_commits" "$page_commits" | jq -s 'add')
+          else
+            echo "📄 No commits on page $page_num"
+          fi
+          
+          # Extract the next URL from Link header
+          link_header=$(echo "$headers" | grep -i "^link:" | sed 's/^link: //i')
+          next_url=""
+          
+          if [ -n "$link_header" ]; then
+            # Parse the Link header to find the "next" relation
+            if echo "$link_header" | grep -q 'rel="next"'; then
+              # Extract URL between < and > for the next relation
+              next_url=$(echo "$link_header" | sed -n 's/.*<\([^>]*\)>; rel="next".*/\1/p')
+            fi
+          fi
+          
+          url="$next_url"
+          page_num=$((page_num + 1))
+        done
         
-        COMMIT_COUNT=$(echo "$COMMITS" | jq '. | length')
-        echo "📊 Found $COMMIT_COUNT commits in the PR"
+        # Save all commit messages to file
+        echo "$all_commits" | jq -r '.[].commit.message' > /tmp/commit_messages.txt
+        
+        COMMIT_COUNT=$(echo "$all_commits" | jq '. | length')
+        echo "📊 Found $COMMIT_COUNT commits in the PR (using Link header pagination)"
 
     - name: Extract Click Up task IDs
       id: extract-tasks
