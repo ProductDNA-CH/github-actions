@@ -75,7 +75,7 @@ runs:
           fi
           
           # Extract the next URL from Link header
-          link_header=$(echo "$headers" | grep -i "^link:" | sed 's/^link: //i')
+          link_header=$(echo "$headers" | grep -i "^link:" | sed 's/^link: //i' || true)
           next_url=""
           
           if [ -n "$link_header" ]; then
