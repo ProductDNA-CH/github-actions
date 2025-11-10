@@ -44,7 +44,44 @@ runs:
       shell: bash
       run: echo 'names=['$BRANCHES']' >> "$GITHUB_OUTPUT"
 
+    - name: Check if refactor/material3 exists
+      id: check-material3
+      shell: bash
+      run: |
+        if git rev-parse --verify origin/refactor/material3 >/dev/null 2>&1; then
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Filter out branches descendant of refactor/material3
+      id: filter-branches
+      env:
+        BRANCHES: ${{ steps.branches-names.outputs.names }}
+        MATERIAL3_EXISTS: ${{ steps.check-material3.outputs.exists }}
+      shell: bash
+      run: |
+        if [ "$BRANCHES" = "[]" ] || [ "$MATERIAL3_EXISTS" = "false" ]; then
+          echo "filtered=$BRANCHES" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        filtered=()
+        for branch in $(echo "$BRANCHES" | jq -r '.[]'); do
+          if ! git merge-base --is-ancestor origin/refactor/material3 "origin/$branch" 2>/dev/null; then
+            filtered+=("\"$branch\"")
+          else
+            echo "Excluding $branch (descendant of refactor/material3)"
+          fi
+        done
+
+        if [ ${#filtered[@]} -eq 0 ]; then
+          echo "filtered=[]" >> "$GITHUB_OUTPUT"
+        else
+          echo "filtered=[$(IFS=,; echo "${filtered[*]}")]" >> "$GITHUB_OUTPUT"
+        fi
+
 outputs:
   branches:
     description: 'Json array list of branches to rebase'
-    value: ${{ steps.branches-names.outputs.names }}
+    value: ${{ steps.filter-branches.outputs.filtered }}
