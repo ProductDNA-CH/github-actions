@@ -32,7 +32,7 @@ Add the following step to your workflow:
 
 ```yaml
 - name: Validate branch name
-  uses: ProductDNA-CH/github-actions/validate-branch-name-on-pr@master
+  uses: ProductDNA-CH/github-actions/validate-branch-name-on-pr@main
 ```
 
 ## 💡 Example Workflow
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate branches name
-        uses: ProductDNA-CH/github-actions/validate-branch-name-on-pr@master
+        uses: ProductDNA-CH/github-actions/validate-branch-name-on-pr@main
 ```
 
 ## 📝 How it works

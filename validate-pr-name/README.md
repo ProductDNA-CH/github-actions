@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Validate PR name
-        uses: ProductDNA-CH/github-actions/validate-pr-name@master
+        uses: ProductDNA-CH/github-actions/validate-pr-name@main
         with:
           scopes: respect-code,respect-code-e2e,respect-saas,respect-saas-e2e,testbed,testbed-e2e,ui,api,core
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -28,7 +28,7 @@ jobs:
 
       - name: Terraform init
         id: init
-        uses: ProductDNA-CH/github-actions/terraform-init@master
+        uses: ProductDNA-CH/github-actions/terraform-init@main
         with:
           storage-account-name: ${{ vars.AZ_TF_STORAGE_ACCOUNT_NAME }}
           container-name: ${{ vars.AZ_TF_CONTAINER_NAME }}

@@ -12,7 +12,7 @@ This action installs the [kubectl](https://kubernetes.io/docs/tasks/tools/) CLI 
 
 ```yaml
 - name: Install kubectl
-  uses: ProductDNA-CH/github-actions/install-kubectl@master
+  uses: ProductDNA-CH/github-actions/install-kubectl@main
   with:
     version: 'latest' # or specify a version, e.g., '1.29.0'
 ```
@@ -26,7 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install kubectl
-        uses: ProductDNA-CH/github-actions/install-kubectl@master
+        uses: ProductDNA-CH/github-actions/install-kubectl@main
         with:
           version: 'latest'
       - name: Verify kubectl version

@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ArgoCD CLI install
-        uses: ProductDNA-CH/github-actions/install-argocd-cli@master
+        uses: ProductDNA-CH/github-actions/install-argocd-cli@main
       - name: ArgoCD Applications deploy
         run: |
           argocd app set myapp --helm-set image.tag=${{ github.event.inputs.tag }}
