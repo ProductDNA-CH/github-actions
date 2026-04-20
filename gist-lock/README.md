@@ -33,7 +33,7 @@ jobs:
     steps:
       - name: Create Gist lock
         id: create
-        uses: ProductDNA-CH/github-actions/gist-lock@master
+        uses: ProductDNA-CH/github-actions/gist-lock@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           mode: create
@@ -43,7 +43,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Acquire lock
-        uses: ProductDNA-CH/github-actions/gist-lock@master
+        uses: ProductDNA-CH/github-actions/gist-lock@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           gist-id: ${{ needs.setup-lock.outputs.gist-id }}
@@ -53,7 +53,7 @@ jobs:
         run: echo "🚧 Critical work in progress..."
 
       - name: Release lock
-        uses: ProductDNA-CH/github-actions/gist-lock@master
+        uses: ProductDNA-CH/github-actions/gist-lock@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           gist-id: ${{ needs.setup-lock.outputs.gist-id }}
@@ -65,7 +65,7 @@ jobs:
     if: always()
     steps:
       - name: Delete Gist
-        uses: ProductDNA-CH/github-actions/gist-lock@master
+        uses: ProductDNA-CH/github-actions/gist-lock@main
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           gist-id: ${{ needs.setup-lock.outputs.gist-id }}

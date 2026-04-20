@@ -40,7 +40,7 @@ Add the following step to your workflow:
 ```yaml
 - name: Get branches to rebase  
   id: get-branches  
-  uses: ProductDNA-CH/github-actions/get-branches-to-rebase@master
+  uses: ProductDNA-CH/github-actions/get-branches-to-rebase@main
 ```
 
 You can then access the output as a JSON array:

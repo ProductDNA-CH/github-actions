@@ -29,7 +29,7 @@ jobs:
         run: az acr login --name ${{ vars.AZ_ACR_NAME }}
 
       - name: Pull, tag, and push Docker image
-        uses: ProductDNA-CH/github-actions/docker-pull-tag-push@master
+        uses: ProductDNA-CH/github-actions/docker-pull-tag-push@main
         with:
           registry: ${{ secrets.REGISTRY_URL }}
           image_name: myimage
