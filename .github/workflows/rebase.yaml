@@ -1,0 +1,17 @@
+name: Rebase branches after main/develop update
+on:
+  push:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: write
+
+jobs:
+  rebase:
+    uses: ProductDNA-CH/devops/.github/workflows/rebase.yaml@main
+    with:
+      app-id: ${{ vars.GH_APP_REBASE_ID }}
+    secrets:
+      private-key: ${{ secrets.GH_APP_REBASE_PRIVATE_KEY }}
