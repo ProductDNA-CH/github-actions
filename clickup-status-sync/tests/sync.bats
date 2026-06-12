@@ -69,3 +69,29 @@ rs() { # helper: run resolve_status with given env
   run env EVENT_NAME=pull_request PR_HEAD_REF=fix/CORE-8 bash -c 'source "'"$SCRIPT"'" 2>/dev/null; resolve_ref'
   [ "$output" = "fix/CORE-8" ]
 }
+
+# --- Task 4: end-to-end (dry-run) ---
+
+@test "e2e: PR opened to develop dry-runs the right calls" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=opened \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-100-x \
+      DEV_BRANCH=develop PROD_BRANCH=main ID_PREFIX=CORE \
+      "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WOULD update CORE-100 -> in review"* ]]
+}
+
+@test "e2e: no task id -> warning, exit 0" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=opened \
+      PR_BASE_REF=develop PR_HEAD_REF=develop "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"::warning::"* ]]
+  [[ "$output" == *"no "* ]]
+}
+
+@test "e2e: no-op event exits 0 quietly" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=closed \
+      PR_MERGED=false PR_HEAD_REF=feat/CORE-1 "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"WOULD update"* ]]
+}

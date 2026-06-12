@@ -66,8 +66,47 @@ resolve_status() {
   esac
 }
 
-# Filled in T4.
-main() { :; }
+# Update a single ClickUp task's status. Honours DRY_RUN. Never aborts the run.
+update_task() {
+  local id="$1" status="$2"
+  if [[ "$DRY_RUN" == "1" ]]; then
+    note "WOULD update ${id} -> ${status}"
+    return 0
+  fi
+  local code body
+  body=$(curl -sS -w '\n%{http_code}' -X PUT \
+    -H "Authorization: ${CLICKUP_TOKEN}" \
+    -H "Content-Type: application/json" \
+    "https://api.clickup.com/api/v2/task/${id}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}" \
+    -d "{\"status\":\"${status}\"}") || { warn "curl failed for ${id}"; return 0; }
+  code=$(tail -n1 <<<"$body")
+  if [[ "$code" == "200" ]]; then
+    note "updated ${id} -> ${status}"
+  else
+    warn "ClickUp API ${code} for ${id}: $(sed '$d' <<<"$body" | tr -d '\n' | cut -c1-200)"
+  fi
+}
+
+main() {
+  local status ref ids found=0
+  status="$(resolve_status)"
+  if [[ -z "$status" ]]; then
+    note "no status transition for event=${EVENT_NAME} action=${PR_ACTION:-} base=${PR_BASE_REF:-}; nothing to do"
+    return 0
+  fi
+  ref="$(resolve_ref)"
+  ids="$(extract_ids "$ref")"
+  if [[ -z "$ids" ]]; then
+    warn "target status '${status}' but no ${ID_PREFIX}-NNN id found in ref '${ref}'"
+    return 0
+  fi
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    update_task "$id" "$status"
+    found=1
+  done <<<"$ids"
+  [[ "$found" == 1 ]] || warn "no task updated"
+}
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   main
