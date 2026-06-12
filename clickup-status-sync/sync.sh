@@ -28,7 +28,13 @@ PR_BASE_REF="${PR_BASE_REF:-}"
 note() { echo "::notice::$*"; }
 warn() { echo "::warning::$*"; }
 
-# Functions filled in T2/T3/T4.
+# Print unique task IDs (one per line) found in $1.
+extract_ids() {
+  local text="$1"
+  grep -oE "${ID_PREFIX}-[0-9]+" <<<"$text" | awk '!seen[$0]++'
+}
+
+# Filled in T3/T4.
 main() { :; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
