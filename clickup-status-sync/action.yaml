@@ -1,0 +1,68 @@
+name: ClickUp Status Sync
+description: Map GitHub branch/PR events to ClickUp task statuses (no native ClickUp automations).
+
+inputs:
+  clickup-token:
+    description: ClickUp API token (pk_...) of the bot user.
+    required: true
+  clickup-team-id:
+    description: ClickUp workspace/team id (for custom_task_ids).
+    required: false
+    default: "90151502952"
+  dev-branch:
+    description: Branch that maps to in review / dev done.
+    required: false
+    default: develop
+  prod-branch:
+    description: Branch that maps to demo done / shipped.
+    required: false
+    default: main
+  id-prefix:
+    description: Custom task id prefix.
+    required: false
+    default: CORE
+  status-in-dev:
+    description: ClickUp status when a branch is created.
+    required: false
+    default: in development
+  status-in-review:
+    description: ClickUp status when a PR is opened to the dev branch.
+    required: false
+    default: in review
+  status-dev-done:
+    description: ClickUp status when a PR is merged to the dev branch.
+    required: false
+    default: dev done
+  status-demo-done:
+    description: ClickUp status when a PR is opened to the prod branch.
+    required: false
+    default: demo done
+  status-shipped:
+    description: ClickUp status when a PR is merged to the prod branch.
+    required: false
+    default: shipped
+
+runs:
+  using: composite
+  steps:
+    - name: Sync ClickUp status
+      shell: bash
+      env:
+        CLICKUP_TOKEN: ${{ inputs.clickup-token }}
+        CLICKUP_TEAM_ID: ${{ inputs.clickup-team-id }}
+        DEV_BRANCH: ${{ inputs.dev-branch }}
+        PROD_BRANCH: ${{ inputs.prod-branch }}
+        ID_PREFIX: ${{ inputs.id-prefix }}
+        STATUS_IN_DEV: ${{ inputs.status-in-dev }}
+        STATUS_IN_REVIEW: ${{ inputs.status-in-review }}
+        STATUS_DEV_DONE: ${{ inputs.status-dev-done }}
+        STATUS_DEMO_DONE: ${{ inputs.status-demo-done }}
+        STATUS_SHIPPED: ${{ inputs.status-shipped }}
+        EVENT_NAME: ${{ github.event_name }}
+        REF_TYPE: ${{ github.event.ref_type }}
+        CREATED_REF: ${{ github.event.ref }}
+        PR_ACTION: ${{ github.event.action }}
+        PR_MERGED: ${{ github.event.pull_request.merged }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+      run: ${{ github.action_path }}/sync.sh
