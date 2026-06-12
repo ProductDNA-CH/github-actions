@@ -47,7 +47,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: ProductDNA-CH/github-actions/clickup-status-sync@v1
+      - uses: ProductDNA-CH/github-actions/clickup-status-sync@clickup-status-sync/v1
         with:
           clickup-token: ${{ secrets.CLICKUP_API_TOKEN }}
 ```
