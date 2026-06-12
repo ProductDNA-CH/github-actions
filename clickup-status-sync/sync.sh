@@ -34,7 +34,39 @@ extract_ids() {
   grep -oE "${ID_PREFIX}-[0-9]+" <<<"$text" | awk '!seen[$0]++'
 }
 
-# Filled in T3/T4.
+# Print the branch ref carrying the task id, depending on the event.
+resolve_ref() {
+  case "$EVENT_NAME" in
+    create)       printf '%s' "$CREATED_REF" ;;
+    pull_request) printf '%s' "$PR_HEAD_REF" ;;
+  esac
+}
+
+# Print the target ClickUp status for this event, or nothing for a no-op.
+resolve_status() {
+  case "$EVENT_NAME" in
+    create)
+      [[ "$REF_TYPE" == "branch" ]] && printf '%s' "$STATUS_IN_DEV"
+      ;;
+    pull_request)
+      case "$PR_ACTION" in
+        opened|reopened|ready_for_review)
+          if   [[ "$PR_BASE_REF" == "$DEV_BRANCH"  ]]; then printf '%s' "$STATUS_IN_REVIEW"
+          elif [[ "$PR_BASE_REF" == "$PROD_BRANCH" ]]; then printf '%s' "$STATUS_DEMO_DONE"
+          fi
+          ;;
+        closed)
+          [[ "$PR_MERGED" == "true" ]] || return 0
+          if   [[ "$PR_BASE_REF" == "$DEV_BRANCH"  ]]; then printf '%s' "$STATUS_DEV_DONE"
+          elif [[ "$PR_BASE_REF" == "$PROD_BRANCH" ]]; then printf '%s' "$STATUS_SHIPPED"
+          fi
+          ;;
+      esac
+      ;;
+  esac
+}
+
+# Filled in T4.
 main() { :; }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
