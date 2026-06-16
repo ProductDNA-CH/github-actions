@@ -1,0 +1,21 @@
+# Dependabot configuration — keeps GitHub Actions references up to date.
+# Opens a single grouped PR on a monthly cadence. References use floating major
+# tags (e.g. actions/checkout@v6), so Dependabot bumps to the latest major tag.
+# This repo hosts composite actions in top-level subdirectories, so `directories`
+# covers both the workflows ("/") and every composite action dir ("/*").
+# Note: references pinned to a branch (e.g. @main) are NOT tracked by Dependabot.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directories:
+      - "/"
+      - "/*"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      prefix: "chore"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 10
