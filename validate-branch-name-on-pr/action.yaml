@@ -30,9 +30,9 @@ runs:
 
         case "$BASE" in
           develop)
-            ALLOWED="feat/, fix/, docs/, style/, refactor/, perf/, test/, build/, ci/, chore/, revert/"
+            ALLOWED="feat/, fix/, docs/, style/, refactor/, perf/, test/, build/, ci/, chore/, revert/, dependabot/"
             case "$PREFIX" in
-              feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)
+              feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert|dependabot)
                 echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
                 ;;
               *)
@@ -47,9 +47,9 @@ runs:
             esac
             ;;
           main)
-            ALLOWED="release/, hotfix/"
+            ALLOWED="release/, hotfix/, dependabot/"
             case "$PREFIX" in
-              release|hotfix)
+              release|hotfix|dependabot)
                 echo "✅ Valid prefix '$PREFIX' for target '$BASE'"
                 ;;
               *)
