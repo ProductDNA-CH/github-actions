@@ -95,3 +95,40 @@ rs() { # helper: run resolve_status with given env
   [ "$status" -eq 0 ]
   [[ "$output" != *"WOULD update"* ]]
 }
+
+# --- read PR body task-list section ---
+
+@test "clickup_section extracts the task list from an HTML-marker block" {
+  body=$'<!--- beginning of the Click Up tasks list -->\n### Click Up Tasks\n- CORE-1\n- CORE-2\n<!--- end of the Click Up tasks list -->\n## Describe your changes\nreverts CORE-999'
+  run env ID_PREFIX=CORE PR_BODY="$body" \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; extract_ids "$(clickup_section "$PR_BODY")"'
+  printf '%s\n' "$output" | grep -qx "CORE-1"
+  printf '%s\n' "$output" | grep -qx "CORE-2"
+  [[ "$output" != *"CORE-999"* ]]
+}
+
+@test "clickup_section fallback reads the heading section and stops at the next heading" {
+  body=$'### Click Up Tasks\n- CORE-6231\n- CORE-6258\n\n## Describe your changes\nreverts CORE-9999'
+  run env ID_PREFIX=CORE PR_BODY="$body" \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; extract_ids "$(clickup_section "$PR_BODY")"'
+  printf '%s\n' "$output" | grep -qx "CORE-6231"
+  printf '%s\n' "$output" | grep -qx "CORE-6258"
+  [[ "$output" != *"CORE-9999"* ]]
+}
+
+@test "resolve_ids unions branch and body ids, deduped" {
+  body=$'### Click Up Tasks\n- CORE-2\n- CORE-3'
+  run env EVENT_NAME=pull_request PR_HEAD_REF=feat/CORE-1-x ID_PREFIX=CORE PR_BODY="$body" \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; resolve_ids'
+  printf '%s\n' "$output" | grep -qx "CORE-1"
+  printf '%s\n' "$output" | grep -qx "CORE-2"
+  printf '%s\n' "$output" | grep -qx "CORE-3"
+  [ "$(printf '%s\n' "$output" | grep -c 'CORE-')" -eq 3 ]
+}
+
+@test "resolve_ids reads no body for a create event" {
+  run env EVENT_NAME=create CREATED_REF=feat/CORE-5-x ID_PREFIX=CORE PR_BODY=$'### Click Up Tasks\n- CORE-77' \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; resolve_ids'
+  printf '%s\n' "$output" | grep -qx "CORE-5"
+  [[ "$output" != *"CORE-77"* ]]
+}

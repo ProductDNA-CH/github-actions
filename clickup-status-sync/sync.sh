@@ -24,6 +24,7 @@ PR_ACTION="${PR_ACTION:-}"
 PR_MERGED="${PR_MERGED:-}"
 PR_HEAD_REF="${PR_HEAD_REF:-}"
 PR_BASE_REF="${PR_BASE_REF:-}"
+PR_BODY="${PR_BODY:-}"
 
 note() { echo "::notice::$*"; }
 warn() { echo "::warning::$*"; }
@@ -40,6 +41,30 @@ resolve_ref() {
     create)       printf '%s' "$CREATED_REF" ;;
     pull_request) printf '%s' "$PR_HEAD_REF" ;;
   esac
+}
+
+# Print only the auto-generated ClickUp task-list slice of a PR body.
+# Prefer the HTML-marker block; else the "### Click Up Tasks" heading section,
+# bounded by the next Markdown heading, so free-text prose is never scanned.
+clickup_section() {
+  local body="$1" block
+  block=$(awk '
+    /beginning of the Click Up tasks list/ {g=1; next}
+    /end of the Click Up tasks list/       {g=0}
+    g' <<<"$body")
+  [[ -n "$block" ]] && { printf '%s' "$block"; return; }
+  awk '
+    /^#+[[:space:]]*Click ?Up Tasks/ {g=1; next}
+    g && /^#/ {g=0}
+    g' <<<"$body"
+}
+
+# Union of task IDs from the head-branch ref and (for PRs) the task-list section.
+resolve_ids() {
+  local ref_ids body_ids=""
+  ref_ids="$(extract_ids "$(resolve_ref)")"
+  [[ "$EVENT_NAME" == "pull_request" ]] && body_ids="$(extract_ids "$(clickup_section "$PR_BODY")")"
+  printf '%s\n%s\n' "$ref_ids" "$body_ids" | awk 'NF && !seen[$0]++'
 }
 
 # Print the target ClickUp status for this event, or nothing for a no-op.
