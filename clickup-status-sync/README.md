@@ -28,9 +28,13 @@ from any individual.
 | `pull_request` | `closed`, not merged | — | no-op |
 | `create` (tag) | — | — | no-op |
 
-The task ID is extracted from the branch name (head branch for PRs) with the regex
-`<id-prefix>-[0-9]+` (default prefix `CORE`); all matches are deduplicated and updated.
-ClickUp matches the `status` field **case-insensitively**.
+Task IDs are extracted from the branch name (head branch for PRs) and, for pull requests,
+from the auto-generated `### Click Up Tasks` section of the PR body (produced by the sibling
+action `list-tickets-from-commit-to-pr`), with the regex `<id-prefix>-[0-9]+` (default prefix
+`CORE`). All matches across both sources are deduplicated and updated. Only that
+machine-generated section is read, never the free-text prose of the description, so a task id
+mentioned in `## Describe your changes` is not moved. ClickUp matches the `status` field
+**case-insensitively**.
 
 ## Usage
 
