@@ -113,16 +113,15 @@ update_task() {
 }
 
 main() {
-  local status ref ids found=0
+  local status ids found=0
   status="$(resolve_status)"
   if [[ -z "$status" ]]; then
     note "no status transition for event=${EVENT_NAME} action=${PR_ACTION:-} base=${PR_BASE_REF:-}; nothing to do"
     return 0
   fi
-  ref="$(resolve_ref)"
-  ids="$(extract_ids "$ref")"
+  ids="$(resolve_ids)"
   if [[ -z "$ids" ]]; then
-    warn "target status '${status}' but no ${ID_PREFIX}-NNN id found in ref '${ref}'"
+    warn "target status '${status}' but no ${ID_PREFIX}-NNN id found in branch '$(resolve_ref)' or PR body"
     return 0
   fi
   while IFS= read -r id; do
