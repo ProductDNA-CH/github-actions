@@ -65,4 +65,5 @@ runs:
         PR_MERGED: ${{ github.event.pull_request.merged }}
         PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PR_BODY: ${{ github.event.pull_request.body }}
       run: ${{ github.action_path }}/sync.sh
