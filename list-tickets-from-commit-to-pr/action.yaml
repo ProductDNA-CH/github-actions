@@ -35,13 +35,15 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
         REPO: ${{ github.repository }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: |
         echo "🔍 Fetching commits in the PR..."
         
-        # Fetch all commits using Link header pagination
+        # Fetch all commits using Link header pagination. The compare endpoint,
+        # not the PR commits one: that one stops at 250 commits, a release can have more.
         all_commits="[]"
-        url="https://api.github.com/repos/$REPO/pulls/$PR_NUMBER/commits?per_page=100"
+        url="https://api.github.com/repos/$REPO/compare/$BASE_SHA...$HEAD_SHA?per_page=100"
         page_num=1
         
         while [ -n "$url" ]; do
@@ -63,8 +65,8 @@ runs:
             exit 1
           fi
           
-          # Parse commits from the response (PR commits endpoint returns an array directly)
-          page_commits=$(echo "$body" | jq '.')
+          # Parse commits from the response (the compare endpoint nests them under .commits)
+          page_commits=$(echo "$body" | jq '.commits')
           page_count=$(echo "$page_commits" | jq '. | length')
           
           if [ "$page_count" -gt 0 ]; then

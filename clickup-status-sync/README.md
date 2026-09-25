@@ -22,9 +22,10 @@ from any individual.
 |---|---|---|---|
 | `create` (branch) | branch created referencing a task | — | **in development** |
 | `pull_request` | `opened` / `ready_for_review` / `reopened` | `develop` | **in review** |
-| `pull_request` | `opened` / `ready_for_review` / `reopened` | `main` | **demo done** |
+| `pull_request` | `opened` / `ready_for_review` / `reopened` / `synchronize` | `main` | **demo done** |
 | `pull_request` | `closed` + merged | `develop` | **dev done** |
 | `pull_request` | `closed` + merged | `main` | **shipped** |
+| `pull_request` | `synchronize` | `develop` | no-op |
 | `pull_request` | `closed`, not merged | — | no-op |
 | `create` (tag) | — | — | no-op |
 
@@ -36,6 +37,11 @@ machine-generated section is read, never the free-text prose of the description,
 mentioned in `## Describe your changes` is not moved. ClickUp matches the `status` field
 **case-insensitively**.
 
+For a pull request to `main`, the ids are also read from **every commit of the PR**, through
+the paginated compare endpoint. The task-list section cannot be relied on there: the sibling
+action writes it in a workflow that runs at the same time as this one, so on `opened` it is
+still empty. And the PR commits endpoint stops at 250 commits, which a release can exceed.
+
 ## Usage
 
 In each consumer repo, add `.github/workflows/clickup-status-sync.yml`:
@@ -45,8 +51,9 @@ name: ClickUp status sync
 on:
   create:
   pull_request:
-    types: [opened, ready_for_review, reopened, closed]
-permissions: {}
+    types: [opened, ready_for_review, reopened, synchronize, closed]
+permissions:
+  contents: read
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -56,14 +63,15 @@ jobs:
           clickup-token: ${{ secrets.CLICKUP_API_TOKEN }}
 ```
 
-No `checkout` is needed — the action only reads the event payload, so it needs **no GitHub
-permissions** (`permissions: {}`).
+No `checkout` is needed. The only GitHub permission it uses is `contents: read`, to list the
+commits of a PR to `main`; without it those ids are skipped with a warning.
 
 ## Inputs
 
 | Input | Required | Default | Description |
 |---|---|---|---|
 | `clickup-token` | **yes** | — | ClickUp API token (`pk_...`) of the bot user |
+| `github-token` | no | `github.token` | Token that lists a `main` PR's commits (`contents: read`) |
 | `clickup-team-id` | no | `90151502952` | ClickUp workspace/team id (for `custom_task_ids`) |
 | `dev-branch` | no | `develop` | Branch that maps to *in review* / *dev done* |
 | `prod-branch` | no | `main` | Branch that maps to *demo done* / *shipped* |
@@ -101,8 +109,11 @@ permissions** (`permissions: {}`).
 - **Never blocks a workflow.** The action always exits `0`. On a missing task ID or a ClickUp API
   error it emits a `::warning::`; on success a `::notice::`.
 - **Idempotent.** Re-applying the same status is a no-op on ClickUp's side.
-- **No anti-regression guard.** Opening a new `develop` PR on an already-shipped task moves it back
-  to *in review* — this matches the original native behavior. (Could be added later if desired.)
+- **Never moves a task back.** Before an update it reads the task's current status; if that status
+  is further along `in development → in review → dev done → demo done → shipped`, the task is kept
+  where it is and a `::notice::` says so. A follow-up PR merged to `develop` therefore no longer
+  sends a shipped task back to *dev done*. Statuses outside that list (`not started`, `scoping`…)
+  never block. To reopen a task on purpose, move it back by hand in ClickUp.
 
 ## Local testing
 

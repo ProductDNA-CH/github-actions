@@ -5,7 +5,7 @@ This GitHub Action automatically extracts Click Up task IDs from commit messages
 ## Features
 
 - Automatically extracts Click Up task IDs (format: `LETTERS-NUMBERS`, e.g., `TASK-123`, `FEAT-456`)
-- Handles pull requests with any number of commits using proper GitHub API pagination
+- Handles pull requests with any number of commits: it pages through the compare endpoint (base...head), since the PR commits endpoint stops at 250
 - Updates PR description with a formatted list of unique task IDs
 - Preserves existing PR description content
 - Places Click Up tasks between invisible HTML comment markers for clean organization
@@ -33,7 +33,7 @@ jobs:
 ## How it works
 
 1. **Fetches PR details**: Retrieves the current PR description
-2. **Gets commits**: Fetches all commits in the PR using GitHub API pagination with Link headers to handle PRs with more than 30 commits
+2. **Gets commits**: Fetches all commits between the PR's base and head through the compare endpoint, following the Link header pagination (the PR commits endpoint caps at 250)
 3. **Extracts task IDs**: Finds all Click Up task IDs matching the pattern `[A-Z]+-[0-9]+`
 4. **Updates description**: Adds or updates a Click Up tasks section in the PR description
 

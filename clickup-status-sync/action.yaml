@@ -5,6 +5,10 @@ inputs:
   clickup-token:
     description: ClickUp API token (pk_...) of the bot user.
     required: true
+  github-token:
+    description: Token that lists a prod-branch PR's commits (needs contents read).
+    required: false
+    default: ${{ github.token }}
   clickup-team-id:
     description: ClickUp workspace/team id (for custom_task_ids).
     required: false
@@ -34,7 +38,7 @@ inputs:
     required: false
     default: dev done
   status-demo-done:
-    description: ClickUp status when a PR is opened to the prod branch.
+    description: ClickUp status when a PR is opened or updated to the prod branch.
     required: false
     default: demo done
   status-shipped:
@@ -50,6 +54,9 @@ runs:
       env:
         CLICKUP_TOKEN: ${{ inputs.clickup-token }}
         CLICKUP_TEAM_ID: ${{ inputs.clickup-team-id }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_API_URL: ${{ github.api_url }}
+        REPO: ${{ github.repository }}
         DEV_BRANCH: ${{ inputs.dev-branch }}
         PROD_BRANCH: ${{ inputs.prod-branch }}
         ID_PREFIX: ${{ inputs.id-prefix }}
@@ -65,5 +72,7 @@ runs:
         PR_MERGED: ${{ github.event.pull_request.merged }}
         PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         PR_BODY: ${{ github.event.pull_request.body }}
       run: ${{ github.action_path }}/sync.sh
