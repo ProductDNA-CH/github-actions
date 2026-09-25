@@ -166,3 +166,94 @@ rs() { # helper: run resolve_status with given env
   [ "$status" -eq 0 ]
   [[ "$output" != *"WOULD update CORE-9999"* ]]
 }
+
+# --- release PRs: ids from the commits, updated release branches ---
+
+@test "PR synchronize to main -> demo done" {
+  rs EVENT_NAME=pull_request PR_ACTION=synchronize PR_BASE_REF=main DEV_BRANCH=develop PROD_BRANCH=main
+  [ "$output" = "demo done" ]
+}
+@test "PR synchronize to develop -> no-op" {
+  rs EVENT_NAME=pull_request PR_ACTION=synchronize PR_BASE_REF=develop DEV_BRANCH=develop PROD_BRANCH=main
+  [ -z "$output" ]
+}
+
+@test "resolve_ids reads the commits of a PR to main, even with an empty body" {
+  run env EVENT_NAME=pull_request PR_BASE_REF=main PROD_BRANCH=main PR_HEAD_REF=release/sprint-23 ID_PREFIX=CORE PR_BODY="" \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             commit_messages() { printf "%s\n" "feat: [CORE-7374] project data tab" "fix: CORE-7568 qty" "chore: no id"; }
+             resolve_ids'
+  printf '%s\n' "$output" | grep -qx "CORE-7374"
+  printf '%s\n' "$output" | grep -qx "CORE-7568"
+  [ "$(printf '%s\n' "$output" | grep -c 'CORE-')" -eq 2 ]
+}
+
+@test "resolve_ids does not read commits for a PR to develop" {
+  run env EVENT_NAME=pull_request PR_BASE_REF=develop PROD_BRANCH=main PR_HEAD_REF=feat/CORE-1-x ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             commit_messages() { echo "CORE-999"; }
+             resolve_ids'
+  [ "$output" = "CORE-1" ]
+}
+
+@test "commit_messages warns and prints nothing without a token" {
+  run env GITHUB_TOKEN= REPO=o/r PR_BASE_SHA=a PR_HEAD_SHA=b \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; commit_messages'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"::warning::"* ]]
+  [[ "$output" != *"CORE-"* ]]
+}
+
+@test "commit_messages pages through the compare endpoint past 250 commits" {
+  run env GITHUB_TOKEN=t REPO=o/r PR_BASE_SHA=a PR_HEAD_SHA=b \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             curl() { # 3 full pages then a partial one: 377 commits
+               local url="${@: -1}" page; page="${url##*page=}"
+               local n=100; [ "$page" = 4 ] && n=77
+               jq -n --argjson n "$n" --arg p "$page" "{commits: [range(\$n) | {commit: {message: \"CORE-\(\$p)\(.)\"}}]}"
+             }
+             commit_messages | wc -l'
+  [ "$(echo "$output" | tr -d ' ')" = "377" ]
+}
+
+# --- never move a task back along the pipeline ---
+
+@test "is_regression: shipped -> dev done is a regression" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null; is_regression "shipped" "dev done"'
+  [ "$status" -eq 0 ]
+}
+@test "is_regression: dev done -> shipped is not" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null; is_regression "dev done" "shipped"'
+  [ "$status" -ne 0 ]
+}
+@test "is_regression: compares status names case-insensitively" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null; is_regression "Demo Done" "in review"'
+  [ "$status" -eq 0 ]
+}
+@test "is_regression: a status outside the pipeline never blocks" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null; is_regression "not started" "in development"'
+  [ "$status" -ne 0 ]
+}
+
+@test "update_task keeps a shipped task out of dev done" {
+  run env DRY_RUN=1 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+                             fetch_status() { echo "shipped"; }
+                             update_task CORE-7568 "dev done"'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"kept CORE-7568 at 'shipped'"* ]]
+  [[ "$output" != *"WOULD update"* ]]
+}
+
+@test "update_task moves a dev done task forward to shipped" {
+  run env DRY_RUN=1 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+                             fetch_status() { echo "dev done"; }
+                             update_task CORE-7374 "shipped"'
+  [[ "$output" == *"WOULD update CORE-7374 -> shipped"* ]]
+}
+
+@test "update_task still updates when the current status cannot be read" {
+  run env DRY_RUN=1 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+                             fetch_status() { :; }
+                             update_task CORE-1 "in review"'
+  [[ "$output" == *"WOULD update CORE-1 -> in review"* ]]
+}
