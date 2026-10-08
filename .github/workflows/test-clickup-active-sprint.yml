@@ -1,0 +1,12 @@
+name: Test clickup-active-sprint
+on:
+  pull_request:
+    # The action imports clickup-sprint-label's module, so a change there is a change here.
+    paths: [clickup-active-sprint/**, clickup-sprint-label/**]
+permissions: {}
+jobs:
+  node-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: node --test clickup-active-sprint/tests/active-sprint.test.mjs

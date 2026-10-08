@@ -212,6 +212,37 @@ origin_subjects() { git -C "$WORK" fetch -q origin && git -C "$WORK" log --forma
   [[ "$output" == *"WOULD"* ]]
 }
 
+@test "active_branch maps the active label through the prefixes" {
+  run env ACTIVE_LABEL="sprint 24" bash -c 'source "'"$SCRIPT"'"; active_branch'
+  [ "$output" = "release/sprint-24" ]
+  run env ACTIVE_LABEL="" bash -c 'source "'"$SCRIPT"'"; active_branch'
+  [ -z "$output" ]
+}
+
+@test "active label: a missing branch for another sprint is not created, the PR stays on develop" {
+  make_pr 7 squash 1 a.txt
+  run_pick "sprint 25" ACTIVE_LABEL="sprint 24"
+  [ "$status" -eq 0 ]
+  [ "$(out_status)" = "ok" ]
+  [ -z "$(origin_tip release/sprint-25)" ]
+  [[ "$output" == *"release/sprint-25: not the active sprint (sprint 24)"* ]]
+}
+
+@test "active label: a missing branch for the active sprint is created" {
+  make_pr 7 squash 1 a.txt
+  run_pick "sprint 24" ACTIVE_LABEL="sprint 24"
+  [ "$(out_status)" = "ok" ]
+  [ "$(origin_tip release/sprint-24)" = "$MERGE_SHA" ]
+}
+
+@test "active label: an existing branch of another sprint still gets the pick" {
+  make_release sprint-24
+  make_pr 7 squash 1 b.txt
+  run_pick "sprint 24" ACTIVE_LABEL="sprint 25"
+  [ "$(out_status)" = "ok" ]
+  [ "$(origin_subjects release/sprint-24 | head -1)" = "feat: pr 7 squashed (#7)" ]
+}
+
 @test "report is written to GITHUB_OUTPUT as a multi-line value" {
   make_pr 7 squash 1 a.txt
   run_pick "sprint 24"
