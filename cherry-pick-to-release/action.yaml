@@ -1,0 +1,83 @@
+name: Cherry-pick to release
+description: Cherry-pick a merged pull request onto the release branch of its sprint label (`sprint 24` -> `release/sprint-24`), creating the branch when it is missing.
+
+inputs:
+  github-token:
+    description: >
+      Token that pushes to the release branches (contents write). Use a GitHub
+      App token, not GITHUB_TOKEN, if the push must trigger other workflows
+      (the release branch's PR build, for instance).
+    required: true
+  labels:
+    description: Comma-separated labels of the pull request. Defaults to the event's.
+    required: false
+    default: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+  pr-number:
+    description: Pull request number. Defaults to the event's.
+    required: false
+    default: ${{ github.event.pull_request.number }}
+  merge-sha:
+    description: The merge commit of the pull request. Defaults to the event's.
+    required: false
+    default: ${{ github.event.pull_request.merge_commit_sha }}
+  commit-count:
+    description: Number of commits in the pull request. Defaults to the event's.
+    required: false
+    default: ${{ github.event.pull_request.commits }}
+  label-prefix:
+    description: Prefix of the labels that name a release.
+    required: false
+    default: "sprint "
+  branch-prefix:
+    description: Prefix of the release branches; the label's remainder is appended.
+    required: false
+    default: release/sprint-
+  git-user-name:
+    description: Committer name of the cherry-picked commits.
+    required: false
+    default: github-actions[bot]
+  git-user-email:
+    description: Committer email of the cherry-picked commits.
+    required: false
+    default: 41898282+github-actions[bot]@users.noreply.github.com
+  dry-run:
+    description: "'true' resolves and reports what would be pushed, pushes nothing."
+    required: false
+    default: "false"
+
+outputs:
+  status:
+    description: "`ok` (every branch is up to date), `conflict` (at least one branch could not take the commit) or `no-label` (no release label on the PR)."
+    value: ${{ steps.pick.outputs.status }}
+  branches:
+    description: The release branches resolved from the labels, comma-separated.
+    value: ${{ steps.pick.outputs.branches }}
+  report:
+    description: One line per branch saying what happened, for a Slack message or a job summary.
+    value: ${{ steps.pick.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ inputs.merge-sha }}
+        fetch-depth: 0
+        token: ${{ inputs.github-token }}
+
+    - name: Cherry-pick onto the release branches
+      id: pick
+      shell: bash
+      env:
+        PR_NUMBER: ${{ inputs.pr-number }}
+        MERGE_SHA: ${{ inputs.merge-sha }}
+        COMMIT_COUNT: ${{ inputs.commit-count }}
+        LABELS: ${{ inputs.labels }}
+        LABEL_PREFIX: ${{ inputs.label-prefix }}
+        BRANCH_PREFIX: ${{ inputs.branch-prefix }}
+        GIT_AUTHOR_NAME: ${{ inputs.git-user-name }}
+        GIT_AUTHOR_EMAIL: ${{ inputs.git-user-email }}
+        GIT_COMMITTER_NAME: ${{ inputs.git-user-name }}
+        GIT_COMMITTER_EMAIL: ${{ inputs.git-user-email }}
+        DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '' }}
+      run: ${{ github.action_path }}/pick.sh | tee -a "$GITHUB_STEP_SUMMARY"

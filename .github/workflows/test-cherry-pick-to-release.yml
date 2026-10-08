@@ -1,0 +1,12 @@
+name: Test cherry-pick-to-release
+on:
+  pull_request:
+    paths: [cherry-pick-to-release/**]
+permissions: {}
+jobs:
+  bats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo apt-get update && sudo apt-get install -y bats
+      - run: bats cherry-pick-to-release/tests/pick.bats
