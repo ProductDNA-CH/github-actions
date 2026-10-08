@@ -1,0 +1,35 @@
+name: ClickUp Active Sprint
+description: Resolve the ClickUp sprint active today, as the `sprint N` label clickup-sprint-label puts on pull requests.
+
+inputs:
+  clickup-token:
+    description: ClickUp API token (pk_...) of the bot user. Read access to the sprint folder is enough.
+    required: true
+  sprint-folder-id:
+    description: ClickUp folder whose lists are the sprints.
+    required: false
+    default: "90159037608"
+  sprint-timezone:
+    description: IANA timezone of the sprint calendar, used to decide which day "today" is.
+    required: false
+    default: Europe/Zurich
+
+outputs:
+  label:
+    description: The active sprint as a label, e.g. `sprint 24`.
+    value: ${{ steps.resolve.outputs.label }}
+  number:
+    description: The active sprint number, e.g. `24`.
+    value: ${{ steps.resolve.outputs.number }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve the active sprint
+      id: resolve
+      shell: bash
+      env:
+        CLICKUP_TOKEN: ${{ inputs.clickup-token }}
+        CLICKUP_SPRINT_FOLDER_ID: ${{ inputs.sprint-folder-id }}
+        SPRINT_TZ: ${{ inputs.sprint-timezone }}
+      run: node "${{ github.action_path }}/active-sprint.mjs"

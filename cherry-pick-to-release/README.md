@@ -6,7 +6,7 @@ A GitHub composite action that, when a pull request is merged, carries its commi
 
 | Release branch     | What happens                                                                               |
 | ------------------ | ------------------------------------------------------------------------------------------ |
-| does not exist yet | created at the PR's merge commit, i.e. `develop` as of that merge, which already holds the PR |
+| does not exist yet | created at the PR's merge commit, i.e. `develop` as of that merge, which already holds the PR. With `active-label` set, **only for the active sprint**: any other sprint's PR is left on develop |
 | exists             | the PR's commits are cherry-picked onto it (`-x`), oldest first, and pushed                  |
 | conflicts          | the cherry-pick is aborted, the branch is left untouched, `status` is `conflict`             |
 
@@ -37,10 +37,15 @@ jobs:
         with:
           client-id: ${{ vars.GH_APP_REBASE_CLIENT_ID }}
           private-key: ${{ secrets.GH_APP_REBASE_PRIVATE_KEY }}
+      - uses: ProductDNA-CH/github-actions/clickup-active-sprint@main
+        id: active
+        with:
+          clickup-token: ${{ secrets.CLICKUP_API_TOKEN }}
       - uses: ProductDNA-CH/github-actions/cherry-pick-to-release@main
         id: pick
         with:
           github-token: ${{ steps.app-token.outputs.token }}
+          active-label: ${{ steps.active.outputs.label }}
       - if: steps.pick.outputs.status != 'ok'
         run: ... # post ${{ steps.pick.outputs.report }} somewhere, then fail on 'conflict'
 ```
@@ -61,6 +66,7 @@ ruleset's bypass list.
 | `commit-count`   | no       | the event's                               | Number of commits in the PR                           |
 | `label-prefix`   | no       | `sprint `                                 | Labels that name a release start with this            |
 | `branch-prefix`  | no       | `release/sprint-`                         | The label's remainder is appended to this             |
+| `active-label`   | no       | _(empty: no gate)_                        | The active sprint's label (`sprint 24`); a missing branch is created only for it |
 | `git-user-name`  | no       | `github-actions[bot]`                     | Committer of the cherry-picked commits                |
 | `git-user-email` | no       | `41898282+github-actions[bot]@users.noreply.github.com` | Committer email                            |
 | `dry-run`        | no       | `false`                                   | `true` reports what would be pushed, pushes nothing   |
@@ -69,9 +75,9 @@ ruleset's bypass list.
 
 | Output     | Value                                                                                                   |
 | ---------- | ------------------------------------------------------------------------------------------------------- |
-| `status`   | `ok` (every branch is up to date), `conflict` (at least one branch could not take the commit, or a push failed), `no-label` (no release label on the PR) |
+| `status`   | `ok` (every branch is up to date, or left on develop by the active-sprint gate), `conflict` (at least one branch could not take the commit, or a push failed), `no-label` (no release label on the PR) |
 | `branches` | The release branches resolved from the labels, comma-separated                                           |
-| `report`   | One line per branch: `created at …`, `picked N commits: …`, `already on the branch`, `CONFLICT on … in <files>` |
+| `report`   | One line per branch: `created at …`, `picked N commits: …`, `already on the branch`, `not the active sprint (…) and no branch yet: left on develop`, `CONFLICT on … in <files>` |
 
 ## Which commits are picked
 
@@ -101,9 +107,14 @@ changes nothing is skipped the same way.
   ```
 
 - **Two sprint labels** means two release branches; a conflict on one does not stop the other.
-- A label for a sprint whose release branch was already merged and deleted **recreates** that
-  branch from `develop` as of the merge. Fix the label and delete the branch if that was a
-  mistake.
+- **Why gate creation on the active sprint.** A sprint 25 PR merged during sprint 24 would
+  otherwise get `release/sprint-25` cut from a `develop` that still carries unreleased sprint 24
+  work, and every later sprint 25 pick would conflict with it. With `active-label` (from
+  [`clickup-active-sprint`](../clickup-active-sprint/README.md)) that PR stays on develop and
+  `release/sprint-25` is cut at the first sprint 25 merge once sprint 25 is active, with the
+  earlier PRs already in it. An **existing** branch is always picked onto, whatever the active
+  sprint: a sprint 24 fix merged two days into sprint 25 still reaches the sprint 24 release.
+  A label for a sprint whose branch was merged and deleted no longer revives it.
 
 ## Local testing
 

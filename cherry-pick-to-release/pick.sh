@@ -5,7 +5,9 @@
 # For every `<LABEL_PREFIX>N` label of the merged pull request, the release
 # branch `<BRANCH_PREFIX>N` receives the PR's commits:
 #   - branch missing  -> created at the merge commit (develop as of the merge),
-#                        which already contains the PR: nothing to pick;
+#                        which already contains the PR: nothing to pick. With
+#                        ACTIVE_LABEL set, only the active sprint's branch is
+#                        created; any other sprint's PR is left on develop;
 #   - branch present  -> the commits are cherry-picked (-x) onto it, oldest
 #                        first, skipping any whose patch id is already there,
 #                        and pushed;
@@ -29,6 +31,7 @@ COMMIT_COUNT="${COMMIT_COUNT:-1}"
 LABELS="${LABELS:-}"
 LABEL_PREFIX="${LABEL_PREFIX:-sprint }"
 BRANCH_PREFIX="${BRANCH_PREFIX:-release/sprint-}"
+ACTIVE_LABEL="${ACTIVE_LABEL:-}"
 DRY_RUN="${DRY_RUN:-}"
 GITHUB_OUTPUT="${GITHUB_OUTPUT:-/dev/null}"
 
@@ -54,6 +57,13 @@ release_branches() {
     [[ -n "$rest" ]] || continue
     printf '%s%s\n' "$BRANCH_PREFIX" "${rest// /-}"
   done
+}
+
+# Print the release branch of ACTIVE_LABEL, or nothing when it is unset.
+active_branch() {
+  [[ -n "$ACTIVE_LABEL" ]] || return 0
+  local rest="${ACTIVE_LABEL#"$LABEL_PREFIX"}"
+  printf '%s%s\n' "$BRANCH_PREFIX" "${rest// /-}"
 }
 
 patch_id() {
@@ -97,6 +107,14 @@ pick_onto() {
   git reset -q --hard
 
   if ! git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
+    # Only the active sprint gets a release branch cut. A PR of a later
+    # sprint stays on develop until its sprint starts; a PR of an earlier,
+    # already released sprint stays on develop too, rather than reviving its
+    # branch.
+    if [[ -n "$ACTIVE_LABEL" && "$branch" != "$(active_branch)" ]]; then
+      report "$branch: not the active sprint ($ACTIVE_LABEL) and no branch yet: left on develop"
+      return 0
+    fi
     if [[ -n "$DRY_RUN" ]]; then
       report "$branch: WOULD be created at $(short "$MERGE_SHA")"
       return 0
