@@ -1,0 +1,49 @@
+name: ClickUp Sprint Label
+description: Label a pull request with the ClickUp sprint of the ticket in its title (`sprint 24`), keeping stale sprint labels off.
+
+inputs:
+  clickup-token:
+    description: ClickUp API token (pk_...) of the bot user. Empty (a PR from a fork) makes the action a no-op.
+    required: true
+  github-token:
+    description: Token that reads and writes the PR's labels (pull-requests and issues write).
+    required: false
+    default: ${{ github.token }}
+  clickup-team-id:
+    description: ClickUp workspace/team id (for custom_task_ids).
+    required: false
+    default: "90151502952"
+  sprint-folder-id:
+    description: ClickUp folder whose lists are the sprints; used to find the sprint active today.
+    required: false
+    default: "90159037608"
+  id-prefix:
+    description: Custom task id prefix.
+    required: false
+    default: CORE
+  sprint-timezone:
+    description: IANA timezone of the sprint calendar, used to decide which day "today" is.
+    required: false
+    default: Europe/Zurich
+  dry-run:
+    description: "'true' resolves the sprint and reports what would change, without touching the labels."
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Sync the sprint label
+      shell: bash
+      env:
+        CLICKUP_TOKEN: ${{ inputs.clickup-token }}
+        CLICKUP_TEAM_ID: ${{ inputs.clickup-team-id }}
+        CLICKUP_SPRINT_FOLDER_ID: ${{ inputs.sprint-folder-id }}
+        ID_PREFIX: ${{ inputs.id-prefix }}
+        SPRINT_TZ: ${{ inputs.sprint-timezone }}
+        DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '' }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_TITLE: ${{ github.event.pull_request.title }}
+      run: node "${{ github.action_path }}/sprint-label.mjs" | tee -a "$GITHUB_STEP_SUMMARY"
