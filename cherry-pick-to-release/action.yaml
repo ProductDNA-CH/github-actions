@@ -88,4 +88,7 @@ runs:
         GIT_COMMITTER_NAME: ${{ inputs.git-user-name }}
         GIT_COMMITTER_EMAIL: ${{ inputs.git-user-email }}
         DRY_RUN: ${{ inputs.dry-run == 'true' && '1' || '' }}
-      run: ${{ github.action_path }}/pick.sh | tee -a "$GITHUB_STEP_SUMMARY"
+      # Through `bash`, not as an executable: the mode bit is not something
+      # every contributor's git records (Windows), and the runner said
+      # "Permission denied" the first time this action ran.
+      run: bash "${{ github.action_path }}/pick.sh" | tee -a "$GITHUB_STEP_SUMMARY"
