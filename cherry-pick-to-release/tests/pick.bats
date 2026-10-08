@@ -71,6 +71,9 @@ commit_on_release() { # <name> <file> <content> <message>
 # Run pick.sh from a fresh clone of origin. $1 = LABELS, rest = extra env.
 run_pick() {
   local labels=$1; shift
+  # Leave the previous clone before deleting it: on Linux a process whose cwd
+  # was removed cannot run `git clone` ("Unable to read current working directory").
+  cd "$TMP"
   rm -rf "$WORK"
   git clone -q "$ORIGIN" "$WORK" 2>/dev/null
   cd "$WORK"
