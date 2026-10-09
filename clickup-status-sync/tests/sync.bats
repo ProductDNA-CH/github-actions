@@ -48,9 +48,9 @@ rs() { # helper: run resolve_status with given env
   rs EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true PR_BASE_REF=develop DEV_BRANCH=develop PROD_BRANCH=main
   [ "$output" = "dev done" ]
 }
-@test "PR merged to main -> shipped" {
+@test "PR merged to main -> demo done (shipped waits for the release)" {
   rs EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true PR_BASE_REF=main DEV_BRANCH=develop PROD_BRANCH=main
-  [ "$output" = "shipped" ]
+  [ "$output" = "demo done" ]
 }
 @test "PR closed unmerged -> no-op" {
   rs EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=false PR_BASE_REF=develop
@@ -256,4 +256,88 @@ rs() { # helper: run resolve_status with given env
                              fetch_status() { :; }
                              update_task CORE-1 "in review"'
   [[ "$output" == *"WOULD update CORE-1 -> in review"* ]]
+}
+
+# --- shipped on a published release ---
+
+@test "release published -> shipped" {
+  rs EVENT_NAME=release PR_ACTION=published RELEASE_PRERELEASE=false
+  [ "$output" = "shipped" ]
+}
+@test "release released -> shipped" {
+  rs EVENT_NAME=release PR_ACTION=released RELEASE_PRERELEASE=false
+  [ "$output" = "shipped" ]
+}
+@test "prerelease published -> no-op" {
+  rs EVENT_NAME=release PR_ACTION=published RELEASE_PRERELEASE=true
+  [ -z "$output" ]
+}
+@test "release created or edited -> no-op" {
+  rs EVENT_NAME=release PR_ACTION=edited RELEASE_PRERELEASE=false
+  [ -z "$output" ]
+}
+
+@test "tag_prefix strips the trailing version" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null; tag_prefix rss-v0.1.79; tag_prefix v0.2.141; tag_prefix rss-doc-v0.0.3'
+  [ "$output" = $'rss-v\nv\nrss-doc-v' ]
+}
+
+@test "previous_release_tag picks the latest published release of the same app" {
+  run env GITHUB_TOKEN=t REPO=o/r RELEASE_TAG=rss-v0.1.79 \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             curl() { cat <<JSON
+[
+ {"tag_name":"rss-v0.1.79","draft":false,"prerelease":false,"published_at":"2026-10-09T10:00:00Z"},
+ {"tag_name":"sh-v0.0.11","draft":false,"prerelease":false,"published_at":"2026-10-08T10:00:00Z"},
+ {"tag_name":"rss-doc-v0.0.3","draft":false,"prerelease":false,"published_at":"2026-10-07T10:00:00Z"},
+ {"tag_name":"rss-v0.1.80","draft":true,"prerelease":false,"published_at":null},
+ {"tag_name":"rss-v0.1.78","draft":false,"prerelease":false,"published_at":"2026-09-23T10:00:00Z"},
+ {"tag_name":"rss-v0.1.77","draft":false,"prerelease":false,"published_at":"2026-09-16T10:00:00Z"}
+]
+JSON
+             }
+             previous_release_tag'
+  [ "$output" = "rss-v0.1.78" ]
+}
+
+@test "resolve_ids reads a release's commits since the previous release" {
+  run env EVENT_NAME=release RELEASE_TAG=v0.2.142 ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             previous_release_tag() { echo v0.2.141; }
+             compare_messages() { [ "$1 $2" = "v0.2.141 v0.2.142" ] && printf "%s\n" "feat: [CORE-7918] contract" "Merge pull request #3380 from release/sprint-24" "fix: CORE-7913 confirm"; }
+             resolve_ids'
+  printf '%s\n' "$output" | grep -qx "CORE-7918"
+  printf '%s\n' "$output" | grep -qx "CORE-7913"
+  [ "$(printf '%s\n' "$output" | grep -c 'CORE-')" -eq 2 ]
+}
+
+@test "resolve_ids reads the release notes when release-ids-from is body" {
+  run env EVENT_NAME=release RELEASE_TAG=rss-v0.1.79 RELEASE_IDS_FROM=body ID_PREFIX=CORE \
+      RELEASE_BODY=$'## Changes\n- refactor: [CORE-7545] label rule (PR #3921)\n- feat(layout): [CORE-7716] header (PR #3913)' \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             compare_messages() { echo "CORE-9999"; }
+             resolve_ids'
+  printf '%s\n' "$output" | grep -qx "CORE-7545"
+  printf '%s\n' "$output" | grep -qx "CORE-7716"
+  [[ "$output" != *"CORE-9999"* ]]
+}
+
+@test "e2e: the first release of an app warns and updates nothing" {
+  run env DRY_RUN=1 EVENT_NAME=release PR_ACTION=published RELEASE_PRERELEASE=false \
+      RELEASE_TAG=pdna-website-v0.0.1 GITHUB_TOKEN=t REPO=o/r \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+             curl() { echo "[]"; }
+             main'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"no previous published release"* ]]
+  [[ "$output" != *"WOULD update"* ]]
+}
+
+@test "e2e: a published release dry-runs shipped per ticket" {
+  run env DRY_RUN=1 EVENT_NAME=release PR_ACTION=published RELEASE_PRERELEASE=false \
+      RELEASE_TAG=rss-v0.1.79 RELEASE_IDS_FROM=body ID_PREFIX=CORE \
+      RELEASE_BODY=$'- feat: [CORE-7716] header\n- fix: [CORE-7545] labels' "$SCRIPT"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WOULD update CORE-7716 -> shipped"* ]]
+  [[ "$output" == *"WOULD update CORE-7545 -> shipped"* ]]
 }

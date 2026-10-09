@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# clickup-status-sync core logic. Reads env vars; its only GitHub API call lists
-# the commits of a PR to the prod branch. Always exits 0 — never blocks a workflow.
+# clickup-status-sync core logic. Reads env vars; its only GitHub API calls list
+# the commits of a PR to the prod branch, and of a published release, and the
+# releases themselves. Always exits 0 — never blocks a workflow.
 set -uo pipefail
 
 # --- Inputs (with defaults) ---
@@ -17,6 +18,10 @@ STATUS_IN_REVIEW="${STATUS_IN_REVIEW:-in review}"
 STATUS_DEV_DONE="${STATUS_DEV_DONE:-dev done}"
 STATUS_DEMO_DONE="${STATUS_DEMO_DONE:-demo done}"
 STATUS_SHIPPED="${STATUS_SHIPPED:-shipped}"
+# Where a published release's task ids come from: `commits` (between the previous
+# published release with the same tag prefix and this one) or `body` (the release
+# notes, for a repo whose notes are already scoped to what the release ships).
+RELEASE_IDS_FROM="${RELEASE_IDS_FROM:-commits}"
 DRY_RUN="${DRY_RUN:-0}"
 
 # --- GitHub event context (mapped by action.yaml) ---
@@ -30,12 +35,17 @@ PR_BASE_REF="${PR_BASE_REF:-}"
 PR_BASE_SHA="${PR_BASE_SHA:-}"
 PR_HEAD_SHA="${PR_HEAD_SHA:-}"
 PR_BODY="${PR_BODY:-}"
+RELEASE_TAG="${RELEASE_TAG:-}"
+RELEASE_BODY="${RELEASE_BODY:-}"
+RELEASE_PRERELEASE="${RELEASE_PRERELEASE:-}"
 
 # The forward order of the pipeline; the sync never moves a task back along it.
 STATUS_ORDER=("$STATUS_IN_DEV" "$STATUS_IN_REVIEW" "$STATUS_DEV_DONE" "$STATUS_DEMO_DONE" "$STATUS_SHIPPED")
 
-note() { echo "::notice::$*"; }
-warn() { echo "::warning::$*"; }
+# On stderr: several helpers print data on stdout that a caller captures, and
+# the runner reads workflow commands from both streams.
+note() { echo "::notice::$*" >&2; }
+warn() { echo "::warning::$*" >&2; }
 
 # Print unique task IDs (one per line) found in $1.
 extract_ids() {
@@ -68,11 +78,21 @@ clickup_section() {
 }
 
 # Print the message of every commit between the PR's base and head.
+commit_messages() {
+  if [[ -z "$PR_BASE_SHA" || -z "$PR_HEAD_SHA" ]]; then
+    warn "cannot list the PR's commits: base/head sha missing"
+    return 0
+  fi
+  compare_messages "$PR_BASE_SHA" "$PR_HEAD_SHA"
+}
+
+# Print the message of every commit between refs $1 and $2.
 # Uses the compare endpoint, paginated: the PR commits endpoint stops at 250
 # commits, and so does compare when it is not paginated.
-commit_messages() {
-  if [[ -z "$GITHUB_TOKEN" || -z "$REPO" || -z "$PR_BASE_SHA" || -z "$PR_HEAD_SHA" ]]; then
-    warn "cannot list the PR's commits: github token, repository or base/head sha missing"
+compare_messages() {
+  local base="$1" head="$2"
+  if [[ -z "$GITHUB_TOKEN" || -z "$REPO" ]]; then
+    warn "cannot list the commits ${base}...${head}: github token or repository missing"
     return 0
   fi
   local page=1 resp count
@@ -80,7 +100,7 @@ commit_messages() {
     resp=$(curl -sS -f \
       -H "Authorization: Bearer ${GITHUB_TOKEN}" \
       -H "Accept: application/vnd.github+json" \
-      "${GITHUB_API_URL}/repos/${REPO}/compare/${PR_BASE_SHA}...${PR_HEAD_SHA}?per_page=100&page=${page}") \
+      "${GITHUB_API_URL}/repos/${REPO}/compare/${base}...${head}?per_page=100&page=${page}") \
       || { warn "GitHub compare failed on page ${page}"; return 0; }
     jq -r '.commits[].commit.message' <<<"$resp"
     count=$(jq '.commits | length' <<<"$resp" 2>/dev/null)
@@ -90,11 +110,60 @@ commit_messages() {
   done
 }
 
+# Print a release tag's prefix: the tag without its trailing version
+# (rss-v0.1.79 -> rss-v, v0.2.141 -> v), so each app of a monorepo is
+# compared with its own previous release.
+tag_prefix() {
+  sed -E 's/[0-9]+(\.[0-9]+)*$//' <<<"$1"
+}
+
+# Print the tag of the published, non-prerelease release that shares
+# RELEASE_TAG's prefix and carries the highest version below it, or nothing.
+previous_release_tag() {
+  if [[ -z "$GITHUB_TOKEN" || -z "$REPO" ]]; then
+    warn "cannot list the releases: github token or repository missing"
+    return 0
+  fi
+  local prefix page=1 resp
+  prefix="$(tag_prefix "$RELEASE_TAG")"
+  while (( page <= 10 )); do
+    resp=$(curl -sS -f \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/vnd.github+json" \
+      "${GITHUB_API_URL}/repos/${REPO}/releases?per_page=100&page=${page}") \
+      || { warn "GitHub releases failed on page ${page}"; return 0; }
+    jq -r '.[] | select((.draft | not) and (.prerelease | not)) | .tag_name' <<<"$resp"
+    (( $(jq 'length' <<<"$resp" 2>/dev/null || echo 0) < 100 )) && break
+    page=$((page + 1))
+  done | { grep -E "^${prefix}[0-9]+(\.[0-9]+)*$"; echo "$RELEASE_TAG"; } \
+    | sort -u -V | grep -B1 -xF "$RELEASE_TAG" | grep -vxF "$RELEASE_TAG"
+}
+
+# Print the text a published release's task ids are read from.
+release_text() {
+  if [[ "$RELEASE_IDS_FROM" == "body" ]]; then
+    printf '%s' "$RELEASE_BODY"
+    return 0
+  fi
+  local previous
+  previous="$(previous_release_tag)"
+  if [[ -z "$previous" ]]; then
+    warn "no previous published release with the prefix of ${RELEASE_TAG}; nothing to mark ${STATUS_SHIPPED}"
+    return 0
+  fi
+  note "reading the commits ${previous}...${RELEASE_TAG}"
+  compare_messages "$previous" "$RELEASE_TAG"
+}
+
 # Union of task IDs from the head-branch ref, (for PRs) the task-list section and
 # (for PRs to the prod branch) the commits themselves: the task-list section is
 # written by a sibling workflow that races this one when the PR opens.
 resolve_ids() {
   local ref_ids body_ids="" commit_ids=""
+  if [[ "$EVENT_NAME" == "release" ]]; then
+    extract_ids "$(release_text)"
+    return 0
+  fi
   ref_ids="$(extract_ids "$(resolve_ref)")"
   if [[ "$EVENT_NAME" == "pull_request" ]]; then
     body_ids="$(extract_ids "$(clickup_section "$PR_BODY")")"
@@ -149,8 +218,17 @@ resolve_status() {
         closed)
           [[ "$PR_MERGED" == "true" ]] || return 0
           if   [[ "$PR_BASE_REF" == "$DEV_BRANCH"  ]]; then printf '%s' "$STATUS_DEV_DONE"
-          elif [[ "$PR_BASE_REF" == "$PROD_BRANCH" ]]; then printf '%s' "$STATUS_SHIPPED"
+          elif [[ "$PR_BASE_REF" == "$PROD_BRANCH" ]]; then printf '%s' "$STATUS_DEMO_DONE"
           fi
+          ;;
+      esac
+      ;;
+    release)
+      # Merging to the prod branch only stages the code on demo: it reaches
+      # production when its release is published.
+      case "$PR_ACTION" in
+        published|released)
+          [[ "$RELEASE_PRERELEASE" == "true" ]] || printf '%s' "$STATUS_SHIPPED"
           ;;
       esac
       ;;
@@ -193,7 +271,7 @@ main() {
   fi
   ids="$(resolve_ids)"
   if [[ -z "$ids" ]]; then
-    warn "target status '${status}' but no ${ID_PREFIX}-NNN id found in branch '$(resolve_ref)' or PR body"
+    warn "target status '${status}' but no ${ID_PREFIX}-NNN id found for event=${EVENT_NAME} ref='$(resolve_ref)${RELEASE_TAG}'"
     return 0
   fi
   while IFS= read -r id; do
