@@ -1,12 +1,12 @@
 name: ClickUp Status Sync
-description: Map GitHub branch/PR events to ClickUp task statuses (no native ClickUp automations).
+description: Map GitHub branch, PR and release events to ClickUp task statuses (no native ClickUp automations).
 
 inputs:
   clickup-token:
     description: ClickUp API token (pk_...) of the bot user.
     required: true
   github-token:
-    description: Token that lists a prod-branch PR's commits (needs contents read).
+    description: Token that lists a prod-branch PR's commits, the releases and a release's commits (needs contents read).
     required: false
     default: ${{ github.token }}
   clickup-team-id:
@@ -38,13 +38,20 @@ inputs:
     required: false
     default: dev done
   status-demo-done:
-    description: ClickUp status when a PR is opened or updated to the prod branch.
+    description: ClickUp status when a PR is opened, updated or merged to the prod branch.
     required: false
     default: demo done
   status-shipped:
-    description: ClickUp status when a PR is merged to the prod branch.
+    description: ClickUp status when a release is published.
     required: false
     default: shipped
+  release-ids-from:
+    description: >-
+      Where a published release's task ids are read from. `commits` (the commits
+      since the previous published release with the same tag prefix) or `body`
+      (the release notes, when they already list only what the release ships).
+    required: false
+    default: commits
 
 runs:
   using: composite
@@ -65,6 +72,7 @@ runs:
         STATUS_DEV_DONE: ${{ inputs.status-dev-done }}
         STATUS_DEMO_DONE: ${{ inputs.status-demo-done }}
         STATUS_SHIPPED: ${{ inputs.status-shipped }}
+        RELEASE_IDS_FROM: ${{ inputs.release-ids-from }}
         EVENT_NAME: ${{ github.event_name }}
         REF_TYPE: ${{ github.event.ref_type }}
         CREATED_REF: ${{ github.event.ref }}
@@ -75,4 +83,7 @@ runs:
         PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         PR_BODY: ${{ github.event.pull_request.body }}
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+        RELEASE_BODY: ${{ github.event.release.body }}
+        RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
       run: ${{ github.action_path }}/sync.sh

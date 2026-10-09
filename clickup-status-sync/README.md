@@ -1,7 +1,7 @@
 # ClickUp Status Sync
 
 A GitHub composite action that moves a ClickUp task to the right status when a branch
-is created or a pull request is opened/merged — driven entirely from GitHub, with **no
+is created, a pull request is opened/merged or a release is published — driven entirely from GitHub, with **no
 native ClickUp automations**.
 
 ## Why this exists
@@ -24,10 +24,18 @@ from any individual.
 | `pull_request` | `opened` / `ready_for_review` / `reopened` | `develop` | **in review** |
 | `pull_request` | `opened` / `ready_for_review` / `reopened` / `synchronize` | `main` | **demo done** |
 | `pull_request` | `closed` + merged | `develop` | **dev done** |
-| `pull_request` | `closed` + merged | `main` | **shipped** |
+| `pull_request` | `closed` + merged | `main` | **demo done** |
+| `release` | `published` / `released`, not a prerelease | — | **shipped** |
 | `pull_request` | `synchronize` | `develop` | no-op |
 | `pull_request` | `closed`, not merged | — | no-op |
 | `create` (tag) | — | — | no-op |
+| `release` | prerelease, or any other action | — | no-op |
+
+**Shipped means published.** Merging a release PR to `main` only stages its code on
+demo; production deploys when a GitHub release is published, which can be days later.
+So a merge to `main` keeps the task at *demo done*, and the release event moves it to
+*shipped*. Before v2, a merge to `main` set *shipped* directly, and Sprint 24 ended with
+tickets marked shipped whose release was still a draft.
 
 Task IDs are extracted from the branch name (head branch for PRs) and, for pull requests,
 from the auto-generated `### Click Up Tasks` section of the PR body (produced by the sibling
@@ -36,6 +44,18 @@ action `list-tickets-from-commit-to-pr`), with the regex `<id-prefix>-[0-9]+` (d
 machine-generated section is read, never the free-text prose of the description, so a task id
 mentioned in `## Describe your changes` is not moved. ClickUp matches the `status` field
 **case-insensitively**.
+
+For a published release, the ids come from one of two places, chosen with
+`release-ids-from`:
+
+- `commits` (default): every commit between the **previous published release with the
+  same tag prefix** and this one. The prefix is the tag without its trailing version
+  (`v0.2.141` → `v`, `rss-v0.1.79` → `rss-v`), so a monorepo publishing one release per
+  app compares each app with its own previous release. The first release of a prefix has
+  nothing to compare with: it warns and updates nothing.
+- `body`: the release notes. Use it where the notes already list only what the release
+  ships, like the frontend monorepo, whose notes hold the commits that touched that one
+  app. Every commit since the previous tag would also include the other apps' work.
 
 For a pull request to `main`, the ids are also read from **every commit of the PR**, through
 the paginated compare endpoint. The task-list section cannot be relied on there: the sibling
@@ -52,19 +72,27 @@ on:
   create:
   pull_request:
     types: [opened, ready_for_review, reopened, synchronize, closed]
+  release:
+    types: [released]
 permissions:
   contents: read
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: ProductDNA-CH/github-actions/clickup-status-sync@clickup-status-sync/v1
+      - uses: ProductDNA-CH/github-actions/clickup-status-sync@clickup-status-sync/v2
         with:
           clickup-token: ${{ secrets.CLICKUP_API_TOKEN }}
+          # release-ids-from: body   # when the release notes are scoped per app
 ```
 
+`released` fires once, when a release is published (or a prerelease is promoted), and not
+for a prerelease. A release published by a workflow with the default `GITHUB_TOKEN`
+triggers no other workflow, so publish it by hand or with an app token.
+
 No `checkout` is needed. The only GitHub permission it uses is `contents: read`, to list the
-commits of a PR to `main`; without it those ids are skipped with a warning.
+commits of a PR to `main`, the releases, and a release's commits; without it those ids are
+skipped with a warning.
 
 ## Inputs
 
@@ -79,8 +107,9 @@ commits of a PR to `main`; without it those ids are skipped with a warning.
 | `status-in-dev` | no | `in development` | Status set when a branch is created |
 | `status-in-review` | no | `in review` | Status set when a PR opens to `dev-branch` |
 | `status-dev-done` | no | `dev done` | Status set when a PR merges to `dev-branch` |
-| `status-demo-done` | no | `demo done` | Status set when a PR opens to `prod-branch` |
-| `status-shipped` | no | `shipped` | Status set when a PR merges to `prod-branch` |
+| `status-demo-done` | no | `demo done` | Status set when a PR opens to, or merges into, `prod-branch` |
+| `status-shipped` | no | `shipped` | Status set when a release is published |
+| `release-ids-from` | no | `commits` | `commits` since the previous release of the same prefix, or the release `body` |
 
 ## Prerequisites (one-time, by an org/workspace admin)
 
