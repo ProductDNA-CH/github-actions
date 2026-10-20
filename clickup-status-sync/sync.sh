@@ -23,6 +23,9 @@ STATUS_SHIPPED="${STATUS_SHIPPED:-shipped}"
 # notes, for a repo whose notes are already scoped to what the release ships).
 RELEASE_IDS_FROM="${RELEASE_IDS_FROM:-commits}"
 DRY_RUN="${DRY_RUN:-0}"
+# How many levels above a moved task the rollup climbs; a guard, not a limit
+# ClickUp hierarchies come near.
+MAX_ROLLUP_DEPTH="${MAX_ROLLUP_DEPTH:-10}"
 
 # --- GitHub event context (mapped by action.yaml) ---
 EVENT_NAME="${EVENT_NAME:-}"
@@ -316,8 +319,40 @@ rollup_parent() {
   update_task "$label" "$status"
 }
 
+# Print "<ancestor> <its parent>" once for every ancestor, at any depth, of the
+# tasks read on stdin. A climb stops at an ancestor already printed (another
+# task of the run shares the rest of the chain) or MAX_ROLLUP_DEPTH levels up.
+ancestor_edges() {
+  local id parent next seen=" " depth
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    depth=0
+    parent="$(fetch_parent "$id")"
+    while [[ -n "$parent" && "$seen" != *" ${parent} "* ]] && (( depth < MAX_ROLLUP_DEPTH )); do
+      seen+="${parent} "
+      next="$(fetch_parent "$parent")"
+      printf '%s %s\n' "$parent" "$next"
+      parent="$next"
+      depth=$((depth + 1))
+    done
+  done
+}
+
+# Read ancestor_edges on stdin and print the ancestors deepest first, so each
+# parent comes after every one of its children in the run.
+bottom_up() {
+  awk '{ parent[$1] = $2; order[NR] = $1 }
+       END {
+         for (i = 1; i <= NR; i++) {
+           d = 0; x = order[i]
+           while (parent[x] != "" && d < 100) { x = parent[x]; d++ }
+           print d, order[i]
+         }
+       }' | sort -s -k1,1nr | cut -d' ' -f2
+}
+
 main() {
-  local status ids parents="" parent found=0
+  local status ids parent found=0
   status="$(resolve_status)"
   if [[ -z "$status" ]]; then
     note "no status transition for event=${EVENT_NAME} action=${PR_ACTION:-} base=${PR_BASE_REF:-}; nothing to do"
@@ -331,14 +366,14 @@ main() {
   while IFS= read -r id; do
     [[ -n "$id" ]] || continue
     update_task "$id" "$status"
-    parents+="$(fetch_parent "$id")"$'\n'
     found=1
   done <<<"$ids"
   [[ "$found" == 1 ]] || warn "no task updated"
-  # Once per parent, after every subtask of this run has moved.
+  # Every ancestor once, from the deepest up: a story moves before its epic,
+  # and the epic is decided on the story's new status.
   while IFS= read -r parent; do
     rollup_parent "$parent"
-  done < <(awk 'NF && !seen[$0]++' <<<"$parents")
+  done < <(ancestor_edges <<<"$ids" | bottom_up)
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
