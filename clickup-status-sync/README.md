@@ -143,6 +143,14 @@ skipped with a warning.
   where it is and a `::notice::` says so. A follow-up PR merged to `develop` therefore no longer
   sends a shipped task back to *dev done*. Statuses outside that list (`not started`, `scoping`…)
   never block. To reopen a task on purpose, move it back by hand in ClickUp.
+- **A parent moves with its subtasks.** A story split into one subtask per repo is never named
+  on a branch or PR, so after the updates the action reads each moved task's parent (once per
+  parent) and moves it to the least advanced status its subtasks share: three subtasks at
+  *dev done* and one *shipped* put the story at *dev done*. A subtask *duplicated* or *cancelled*
+  (closed outside the pipeline) does not count; one still before it (*not started*, *scoping*…)
+  holds the parent where it is. The parent is never moved back either. One level per run: a
+  story named on a branch rolls up its epic, but a story moved by a rollup does not roll up
+  its own parent until one of its siblings moves.
 
 ## Local testing
 

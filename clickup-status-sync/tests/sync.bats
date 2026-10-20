@@ -341,3 +341,81 @@ JSON
   [[ "$output" == *"WOULD update CORE-7716 -> shipped"* ]]
   [[ "$output" == *"WOULD update CORE-7545 -> shipped"* ]]
 }
+
+# --- a parent moves with its subtasks ---
+
+@test "task_url adds custom_task_ids only for a custom id" {
+  run env ID_PREFIX=CORE CLICKUP_TEAM_ID=42 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    task_url CORE-7752; echo; task_url 12493t4kg8c include_subtasks=true'
+  [ "$output" = $'https://api.clickup.com/api/v2/task/CORE-7752?custom_task_ids=true&team_id=42\nhttps://api.clickup.com/api/v2/task/12493t4kg8c?include_subtasks=true' ]
+}
+
+@test "rollup_status picks the least advanced pipeline status" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    printf "shipped\tdone\ndev done\tcustom\ndemo done\tcustom\n" | rollup_status'
+  [ "$output" = "dev done" ]
+}
+@test "rollup_status ignores a cancelled or duplicated subtask" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    printf "cancelled\tclosed\nduplicated\tdone\nin review\tcustom\n" | rollup_status'
+  [ "$output" = "in review" ]
+}
+@test "rollup_status holds the parent while a subtask is not started" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    printf "dev done\tcustom\nnot started\topen\n" | rollup_status'
+  [ -z "$output" ]
+}
+@test "rollup_status prints nothing when every subtask is cancelled" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    printf "cancelled\tclosed\n" | rollup_status'
+  [ -z "$output" ]
+}
+
+# CORE-7752 as found on 2026-10-20: four subtasks merged, the story still not started.
+parent_stub='fetch_task() {
+  case "$1" in
+    12493t4kg8c) cat <<JSON
+{"id":"12493t4kg8c","custom_id":"CORE-7752","status":{"status":"not started","type":"open"},"subtasks":[
+ {"status":{"status":"dev done","type":"custom"}},
+ {"status":{"status":"shipped","type":"done"}},
+ {"status":{"status":"dev done","type":"custom"}},
+ {"status":{"status":"dev done","type":"custom"}}]}
+JSON
+    ;;
+    CORE-7970|CORE-8026) echo "{\"parent\":\"12493t4kg8c\",\"status\":{\"status\":\"in review\"}}" ;;
+    *) echo "{\"parent\":null,\"status\":{\"status\":\"in review\"}}" ;;
+  esac
+}'
+
+@test "e2e: merging the last subtask moves its parent story to dev done" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-8026-x DEV_BRANCH=develop ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$parent_stub"'; main'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WOULD update CORE-8026 -> dev done"* ]]
+  [[ "$output" == *"WOULD update CORE-7752 -> dev done"* ]]
+}
+
+@test "e2e: two subtasks of one parent roll it up once" {
+  body=$'### Click Up Tasks\n- CORE-7970\n- CORE-8026'
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/x DEV_BRANCH=develop ID_PREFIX=CORE PR_BODY="$body" \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$parent_stub"'; main'
+  [ "$(printf '%s\n' "$output" | grep -c 'WOULD update CORE-7752')" -eq 1 ]
+}
+
+@test "e2e: a task with no parent rolls nothing up" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=opened \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-100-x DEV_BRANCH=develop ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$parent_stub"'; main'
+  [[ "$output" == *"WOULD update CORE-100 -> in review"* ]]
+  [ "$(printf '%s\n' "$output" | grep -c 'WOULD update')" -eq 1 ]
+}
+
+@test "e2e: a parent already further along is kept" {
+  run env DRY_RUN=1 EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-8026-x DEV_BRANCH=develop ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$parent_stub"'
+             fetch_status() { [ "$1" = CORE-7752 ] && echo "demo done"; }; main'
+  [[ "$output" == *"kept CORE-7752 at 'demo done'"* ]]
+}
