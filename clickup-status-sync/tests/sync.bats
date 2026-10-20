@@ -419,3 +419,69 @@ JSON
              fetch_status() { [ "$1" = CORE-7752 ] && echo "demo done"; }; main'
   [[ "$output" == *"kept CORE-7752 at 'demo done'"* ]]
 }
+
+# --- the rollup climbs every level, from the deepest up ---
+
+@test "bottom_up lists ancestors deepest first" {
+  run bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    printf "%s\n" "epic " "story epic" "sub story" "other-story epic" | bottom_up'
+  [ "$output" = $'sub\nstory\nother-story\nepic' ]
+}
+
+@test "ancestor_edges reads a shared chain once" {
+  run env MAX_ROLLUP_DEPTH=10 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    fetch_parent() { case "$1" in CORE-1|CORE-2) echo story ;; story) echo epic ;; esac; }
+    printf "%s\n" CORE-1 CORE-2 | ancestor_edges'
+  [ "$output" = $'story epic\nepic ' ]
+}
+
+@test "ancestor_edges stops at MAX_ROLLUP_DEPTH on a parent loop" {
+  run env MAX_ROLLUP_DEPTH=3 bash -c 'source "'"$SCRIPT"'" 2>/dev/null
+    n=0; fetch_parent() { echo "p$(( ${1#p} + 1 ))" 2>/dev/null || echo p1; }
+    echo p0 | ancestor_edges | wc -l'
+  [ "$(echo "$output" | tr -d ' ')" = "3" ]
+}
+
+# A four-level tree held in a file, so an update is seen by the next level's read:
+#   epic E (not started)
+#   ├─ story S1 (not started) ─┬─ T1 (in review) ── U1 (in review, named on the branch)
+#   │                          └─ T2 (dev done)
+#   └─ story S2 (dev done)
+tree_stub='TREE="$BATS_TMP/tree"
+cat >"$TREE" <<ROWS
+CORE-1 E not_started
+CORE-2 E dev_done
+CORE-3 CORE-1 in_review
+CORE-4 CORE-1 dev_done
+CORE-5 CORE-3 in_review
+E - not_started
+ROWS
+st() { awk -v id="$1" "\$1==id {print \$3}" "$TREE" | tr _ " "; }
+fetch_task() {
+  local id="$1" parent
+  parent="$(awk -v id="$id" "\$1==id {print \$2}" "$TREE")"; [ "$parent" = - ] && parent=""
+  awk -v id="$id" "\$2==id {print \$3}" "$TREE" | tr _ " " \
+    | jq -R "{status: {status: ., type: \"custom\"}}" | jq -s \
+      --arg id "$id" --arg p "$parent" --arg s "$(st "$id")" \
+      "{id: \$id, custom_id: \$id, parent: (if \$p == \"\" then null else \$p end), status: {status: \$s}, subtasks: .}"
+}
+update_task() {
+  echo "moved $1 -> $2"
+  awk -v id="$1" -v s="${2// /_}" "\$1==id {\$3=s} {print}" "$TREE" >"$TREE.new" && mv "$TREE.new" "$TREE"
+}'
+
+@test "e2e: a sub-subtask moving rolls every level up, deepest first" {
+  run env BATS_TMP="$BATS_TEST_TMPDIR" EVENT_NAME=pull_request PR_ACTION=closed PR_MERGED=true \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-5-x DEV_BRANCH=develop ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$tree_stub"'; main 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$output" = $'moved CORE-5 -> dev done\nmoved CORE-3 -> dev done\nmoved CORE-1 -> dev done\nmoved E -> dev done' ]
+}
+
+@test "e2e: a level held back still lets nothing above it move" {
+  run env BATS_TMP="$BATS_TEST_TMPDIR" EVENT_NAME=pull_request PR_ACTION=opened \
+      PR_BASE_REF=develop PR_HEAD_REF=feat/CORE-5-x DEV_BRANCH=develop ID_PREFIX=CORE \
+    bash -c 'source "'"$SCRIPT"'" 2>/dev/null; '"$tree_stub"'
+             sed -i.bak "s/^CORE-4 CORE-1 dev_done/CORE-4 CORE-1 not_started/" "$TREE"; main 2>/dev/null'
+  [ "$output" = $'moved CORE-5 -> in review\nmoved CORE-3 -> in review' ]
+}

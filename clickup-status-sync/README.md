@@ -148,9 +148,11 @@ skipped with a warning.
   parent) and moves it to the least advanced status its subtasks share: three subtasks at
   *dev done* and one *shipped* put the story at *dev done*. A subtask *duplicated* or *cancelled*
   (closed outside the pipeline) does not count; one still before it (*not started*, *scoping*…)
-  holds the parent where it is. The parent is never moved back either. One level per run: a
-  story named on a branch rolls up its epic, but a story moved by a rollup does not roll up
-  its own parent until one of its siblings moves.
+  holds the parent where it is. The parent is never moved back either. The rollup climbs every
+  level, from the deepest up: a sub-subtask moving rolls up its subtask, then the story, then
+  the epic, each read after the level below has moved. Every ancestor is rolled up once per run,
+  even when several moved tasks share it. The climb stops after `MAX_ROLLUP_DEPTH` levels (10),
+  a guard against a parent loop.
 
 ## Local testing
 
