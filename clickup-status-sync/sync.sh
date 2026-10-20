@@ -190,13 +190,31 @@ is_regression() {
   (( current >= 0 && target >= 0 && current > target ))
 }
 
+# Print the ClickUp API url of task $1 (plus extra query $2). A custom id
+# (CORE-123) needs custom_task_ids; an internal id, as a task's parent is
+# given, must be sent without it.
+task_url() {
+  local id="$1" extra="${2:-}" query=""
+  [[ "$id" =~ ^${ID_PREFIX}-[0-9]+$ ]] && query="custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}"
+  [[ -n "$extra" ]] && query="${query:+${query}&}${extra}"
+  printf 'https://api.clickup.com/api/v2/task/%s%s' "$id" "${query:+?${query}}"
+}
+
+# Print a task's ClickUp JSON (with extra query $2), or nothing if it cannot be read.
+fetch_task() {
+  local id="$1" extra="${2:-}"
+  [[ "$DRY_RUN" == "1" ]] && return 0
+  curl -sS -f -H "Authorization: ${CLICKUP_TOKEN}" "$(task_url "$id" "$extra")" 2>/dev/null || true
+}
+
 # Print a task's current ClickUp status, or nothing if it cannot be read.
 fetch_status() {
-  local id="$1"
-  [[ "$DRY_RUN" == "1" ]] && return 0
-  curl -sS -f -H "Authorization: ${CLICKUP_TOKEN}" \
-    "https://api.clickup.com/api/v2/task/${id}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}" \
-    | jq -r '.status.status // empty' 2>/dev/null || true
+  fetch_task "$1" | jq -r '.status.status // empty' 2>/dev/null || true
+}
+
+# Print the internal id of a task's parent, or nothing for a top-level task.
+fetch_parent() {
+  fetch_task "$1" | jq -r '.parent // empty' 2>/dev/null || true
 }
 
 # Print the target ClickUp status for this event, or nothing for a no-op.
@@ -252,7 +270,7 @@ update_task() {
   body=$(curl -sS -w '\n%{http_code}' -X PUT \
     -H "Authorization: ${CLICKUP_TOKEN}" \
     -H "Content-Type: application/json" \
-    "https://api.clickup.com/api/v2/task/${id}?custom_task_ids=true&team_id=${CLICKUP_TEAM_ID}" \
+    "$(task_url "$id")" \
     -d "{\"status\":\"${status}\"}") || { warn "curl failed for ${id}"; return 0; }
   code=$(tail -n1 <<<"$body")
   if [[ "$code" == "200" ]]; then
@@ -262,8 +280,44 @@ update_task() {
   fi
 }
 
+# Print the status a parent should hold given its subtasks' statuses, read as
+# "<status>\t<type>" lines on stdin: the least advanced pipeline status among
+# them. A subtask closed outside the pipeline (duplicated, cancelled) does not
+# count; one still before it (not started, scoping…) holds the parent back, so
+# nothing is printed, as when no subtask counts.
+rollup_status() {
+  local status type rank min=""
+  while IFS=$'\t' read -r status type; do
+    [[ -n "$status" ]] || continue
+    rank="$(status_rank "$status")"
+    if (( rank < 0 )); then
+      [[ "$type" == "done" || "$type" == "closed" ]] && continue
+      return 0
+    fi
+    [[ -z "$min" ]] || (( rank < min )) && min="$rank"
+  done
+  [[ -n "$min" ]] && printf '%s' "${STATUS_ORDER[$min]}"
+  return 0
+}
+
+# Move parent task $1 (internal id) to the status its subtasks have all reached.
+# A parent story split into subtasks per repo is never named on a branch or PR,
+# so nothing else moves it.
+rollup_parent() {
+  local parent="$1" task label status
+  task="$(fetch_task "$parent" "include_subtasks=true")"
+  [[ -n "$task" ]] || { warn "cannot read parent task ${parent}"; return 0; }
+  label="$(jq -r '.custom_id // .id' <<<"$task")"
+  status="$(jq -r '.subtasks[]? | [.status.status, .status.type] | @tsv' <<<"$task" | rollup_status)"
+  if [[ -z "$status" ]]; then
+    note "kept parent ${label}: its subtasks have not all reached the pipeline"
+    return 0
+  fi
+  update_task "$label" "$status"
+}
+
 main() {
-  local status ids found=0
+  local status ids parents="" parent found=0
   status="$(resolve_status)"
   if [[ -z "$status" ]]; then
     note "no status transition for event=${EVENT_NAME} action=${PR_ACTION:-} base=${PR_BASE_REF:-}; nothing to do"
@@ -277,9 +331,14 @@ main() {
   while IFS= read -r id; do
     [[ -n "$id" ]] || continue
     update_task "$id" "$status"
+    parents+="$(fetch_parent "$id")"$'\n'
     found=1
   done <<<"$ids"
   [[ "$found" == 1 ]] || warn "no task updated"
+  # Once per parent, after every subtask of this run has moved.
+  while IFS= read -r parent; do
+    rollup_parent "$parent"
+  done < <(awk 'NF && !seen[$0]++' <<<"$parents")
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
