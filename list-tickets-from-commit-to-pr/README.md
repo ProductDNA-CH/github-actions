@@ -60,6 +60,18 @@ The action will add this section to your PR description:
 | Input | Description | Required |
 |-------|-------------|----------|
 | `github-token` | GitHub token used to update the PR description | Yes |
+| `ids-from` | Where the task IDs are read from: `commits` (default, every commit message of the PR) or `title` (the PR title only). See *Reading the task from the title* below. | No |
+
+### Reading the task from the title
+
+With `ids-from: commits`, a commit that merely mentions another task (a related bug, an earlier fix) lists it too, and a status sync that reads this list, like `clickup-status-sync`, then moves that unrelated task along with the PR. A repo whose PR titles carry their task (`fix(app): [CORE-123] ...`) can pass `ids-from: title` to list only that. A release PR, whose title names no task, should keep `commits`, so the list covers everything it ships:
+
+```yaml
+      - uses: ProductDNA-CH/github-actions/list-tickets-from-commit-to-pr@main
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          ids-from: ${{ github.event.pull_request.base.ref == 'main' && 'commits' || 'title' }}
+```
 
 ## Requirements
 

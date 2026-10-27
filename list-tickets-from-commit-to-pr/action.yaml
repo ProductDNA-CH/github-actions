@@ -5,6 +5,16 @@ inputs:
   github-token:
     description: GitHub token used to update the PR description
     required: true
+  ids-from:
+    description: >-
+      Where the task IDs are read from. `commits` (default): every commit
+      message of the PR, so a commit that merely mentions another task (a
+      related bug, an earlier fix) lists it too, and a status sync reading this
+      list then moves it. `title`: the PR title only, for repos whose titles
+      carry the task, e.g. `fix(app): [CORE-123] ...`. A release PR, whose
+      title names no task, should keep `commits`.
+    required: false
+    default: commits
 
 runs:
   using: "composite"
@@ -26,11 +36,13 @@ runs:
         
         # Save to file for next steps
         echo "$CURRENT_BODY" > /tmp/pr_body.txt
+        echo "$PR_DATA" | jq -r '.title // ""' > /tmp/pr_title.txt
         
         echo "📝 Current PR description retrieved"
 
     - name: Get commits in PR
       id: get-commits
+      if: inputs.ids-from != 'title'
       shell: bash
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
@@ -101,8 +113,14 @@ runs:
     - name: Extract Click Up task IDs
       id: extract-tasks
       shell: bash
+      env:
+        IDS_FROM: ${{ inputs.ids-from }}
       run: |
-        echo "🔍 Extracting Click Up task IDs from commit messages..."
+        case "$IDS_FROM" in
+          title)   SOURCE=/tmp/pr_title.txt; echo "🔍 Extracting Click Up task IDs from the PR title..." ;;
+          commits) SOURCE=/tmp/commit_messages.txt; echo "🔍 Extracting Click Up task IDs from commit messages..." ;;
+          *)       echo "❌ ids-from must be 'commits' or 'title', got '$IDS_FROM'"; exit 1 ;;
+        esac
         
         TASK_IDS=""
         FOUND_TASKS=()
@@ -120,7 +138,7 @@ runs:
             # Remove the matched part to find the next one
             message="${message#*$TASK_ID}"
           done
-        done < /tmp/commit_messages.txt
+        done < "$SOURCE"
         
         # Sort and format the task IDs
         if [ ${#FOUND_TASKS[@]} -gt 0 ]; then
@@ -142,7 +160,7 @@ runs:
           echo "$TASK_IDS"
           echo "has_tasks=true" >> $GITHUB_OUTPUT
         else
-          echo "ℹ️ No Click Up task IDs found in commit messages"
+          echo "ℹ️ No Click Up task IDs found in the $IDS_FROM"
           echo "has_tasks=false" >> $GITHUB_OUTPUT
         fi
         
